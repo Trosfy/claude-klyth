@@ -78,7 +78,7 @@ test('/model strong runs no key helper; a routed step whose helper fails answers
   expect(w.stateSets).toContainEqual({ key: 'main', value: 'strong' })
   expect(w.runs.filter(r => r[0] === HELPER[0])).toEqual([])
   const s = await step($, { turnId: 'k', index: 0 })
-  const text = 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme'
+  const text = 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run klyth auth login api-key acme'
   expect(s.result).toMatchObject({ answer: text, stopReason: 'end_turn', usage: null })
   expect(w.runs.filter(r => r[0] === HELPER[0])).toEqual([HELPER])
   expect(w.toasts).toEqual([])
@@ -389,7 +389,7 @@ test('/klyth ends with one next step for the first thing wrong: no config, a bro
   await $.command.run({ command: 'klyth', args: 'reload', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
   await model($, 'strong')
   await step($, { turnId: 'k', index: 0 })
-  expect(await nextStep()).toEqual(['  next: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme'])
+  expect(await nextStep()).toEqual(['  next: acme key helper failed (exit 1): keychain locked, or no key stored? Run klyth auth login api-key acme'])
   expect(w.transcript).toContain('  acme      openai  https://klyth.invalid  cmd failed  yes')
 })
 

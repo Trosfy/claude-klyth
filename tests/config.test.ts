@@ -181,7 +181,7 @@ test('maxTokensParam "none", a shadowed built-in alias and a models array are re
   expect(errorsOf(withProvider({ models: [{ id: 'model-a' }] }))).toContain('providers.acme.models: must be a map of model ids')
 })
 
-const LOGIN = 'bun run auth login acme, which stores the key in the keychain and writes "auth": { "command": [...] }'
+const LOGIN = 'klyth auth login api-key acme, which stores the key in the keychain and writes "auth": { "command": [...] }'
 const OR_NONE = ', or set "auth": "none" for a server that checks no key'
 const MUST_BE = 'providers.acme.auth: must be { "command": ["/absolute/helper", ...] } or "none"'
 // The acme provider with its auth replaced: `undefined` leaves auth out.
@@ -190,7 +190,7 @@ const withAuth = (auth: unknown, extra: Record<string, unknown> = {}) => {
   return base({ providers: { acme: { ...rest, ...(auth === undefined ? {} : { auth }), ...extra } } })
 }
 
-test('apiKeyEnv is gone: it is refused with one line naming bun run auth login, alone, with or without an auth beside it', () => {
+test('apiKeyEnv is gone: it is refused with one line naming klyth auth login api-key, alone, with or without an auth beside it', () => {
   const MOVED = `providers.acme.apiKeyEnv: no longer read; keys come from a credential helper. Run ${LOGIN} in its place`
   expect(errorsOf(withAuth(undefined, { apiKeyEnv: 'ACME_KEY' }))).toEqual([MOVED])
   expect(errorsOf(withAuth({ command: HELPER }, { apiKeyEnv: 'ACME_KEY' }))).toEqual([MOVED])

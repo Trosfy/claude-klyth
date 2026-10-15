@@ -1,10 +1,11 @@
 import type { Elements, RenderElement } from 'claude-code'
 import type { UsagePaneState } from '../types'
 import type { UsageSession } from './usage-ledger'
-import { usageCacheRatio, usageCompactNumber, usageCompactTokens, usageDisplay, usageModelDetails, usageSummary, usageView, type UsageFilter } from './usage-view'
+import { usageCacheRatio, usageNumber, usageCompactTokens, usageModelNames, usageCount, usageWarning, usageEmptyModels, USAGE_HEADING, USAGE_UNAVAILABLE, type UsageRecordState, usageModelDetails, usageSummary, usageView, type UsageFilter } from './usage-view'
 
 export const USAGE_PANE = 'klyth-usage'
 const FILTERS: UsageFilter[] = ['All', 'Main', 'Children', 'Maintenance']
+const FILTER_LABELS = { All: 'All', Main: 'Main conversation', Children: 'Subagents', Maintenance: 'Checks and summaries' }
 const MODEL_PAGE = 20
 const DETAIL_PAGE = 16
 
@@ -36,70 +37,67 @@ export type UsagePanePort = {
 }
 
 // Constructors and callbacks belong to the host; rendering only reads the supplied snapshots.
-export function renderUsagePane(io: UsagePanePort, sessionId: string, session: UsageSession | undefined, saved: UsagePaneState | undefined, bodyColumns: number, contextTokens?: number): RenderElement {
+export function renderUsagePane(io: UsagePanePort, sessionId: string, session: UsageSession | undefined, saved: UsagePaneState | undefined, bodyColumns: number, contextTokens?: number, recordState: UsageRecordState = 'active'): RenderElement {
   const { Box, Text, Button } = io.elements
   const state = usagePanePreferences(sessionId, saved)
   const text = (line: string, dimColor = false) => Text({ children: line, dimColor })
   const button = (key: string, label: string, onPress: () => Promise<void>, hotkey?: string) => Button({ key, label, onPress, ...(hotkey === undefined ? {} : { hotkey }) })
   const toolbar = (children: RenderElement[]) => Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 1, children })
   const controls = () => toolbar([
-    ...(session === undefined ? [] : [button('diagnostics', state.diagnostics ? 'Less' : 'Details', () => io.change({ type: 'diagnostics' }), 'd')]),
-    button('text', 'Text', io.text, 't'), button('close', 'Close', io.close, 'q'),
+    ...(session === undefined ? [] : [button('diagnostics', state.diagnostics ? 'Hide session details' : 'Session details', () => io.change({ type: 'diagnostics' }), 'd')]),
+    button('text', 'Print report', io.text, 't'), button('close', 'Close', io.close, 'q'),
   ])
-  const heading = Text({ bold: true, children: 'Klyth usage · This session' })
-  if (session === undefined) return Box({ flexDirection: 'column', children: [heading, text('Estimated cost: unavailable'), text('Usage is not available yet.'), controls(), text('Esc to close', true)] })
-  const view = usageView(session, state.filter)
+  const heading = Text({ bold: true, children: USAGE_HEADING })
+  if (session === undefined) return Box({ flexDirection: 'column', children: [heading, controls(), text('Press Escape to close.', true), ...USAGE_UNAVAILABLE.map(line => text(line))] })
+  const view = usageView(session, state.filter, recordState)
   const requests = session.logicalRequests + session.untrackedRequests
-  const cost = requests === 0 ? 'Not priced yet' : view.estimatedCost
+  const cost = view.estimatedCost
   const metric = (label: string, value: string) => Box({ flexDirection: 'column', minWidth: 10, children: [text(label, true), Text({ bold: true, children: value })] })
-  const children: RenderElement[] = [heading, Text({ bold: true, children: `Estimated cost: ${cost}` }), Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, marginTop: 1, marginBottom: 1, children: [
-    metric('Input', usageCompactTokens(session.totals.totalInput)), metric('Output', usageCompactTokens(session.totals.output)),
-    metric('Cache reuse', usageCacheRatio(session.cacheReadTokens, session.cacheInputTokens)), metric('Requests', usageCompactNumber(requests)),
+  const children: RenderElement[] = [heading, controls(), text('Press Escape to close.', true), Text({ bold: true, children: `Estimated cost: ${cost}` }), Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, marginTop: 1, marginBottom: 1, children: [
+    metric('Input tokens', usageCompactTokens(session.totals.totalInput)), metric('Output tokens', usageCompactTokens(session.totals.output)),
+    metric('Input tokens from cache', usageCacheRatio(session.cacheReadTokens, session.cacheInputTokens)), metric('Requests', usageNumber(requests)),
   ] })]
-  if (session.warnings.persistenceFailure) children.push(text('Not saved; live totals are still tracked.'))
-  if (session.warnings.recovered || session.warnings.earlierUnavailable) children.push(text('Earlier usage may be missing. See Details.'))
-  if (session.warnings.trackingGap || session.unknownExecutions > 0 || session.untrackedRequests > 0 || session.missingUsageAttempts > 0 || session.arithmeticOverflow) children.push(text('Some usage is unreported. See Details.'))
+  children.push(...usageWarning(session, recordState).map(line => text(line)))
   const pending = Object.keys(session.pending).length
-  if (pending > 0) children.push(text(`${pending} request${pending === 1 ? '' : 's'} in progress`, true))
+  if (pending > 0) children.push(text(recordState === 'fenced' ? `${usageCount(pending, 'request')} without final records. Print this report to keep the current totals.` : `${usageCount(pending, 'request')} in progress. Wait for the request to finish.`, true))
   const hasModels = Object.keys(session.buckets).length > 0
   if (hasModels) {
-    children.push(toolbar(FILTERS.map(filter => Button({ key: `filter-${filter}`, label: state.filter === filter ? `[${filter}]` : filter, plain: true, onPress: () => io.change({ type: 'filter', filter }) }))))
-    children.push(text(`Models · ${state.filter}`, true))
+    children.push(toolbar(FILTERS.map(filter => Button({ key: `filter-${filter}`, label: state.filter === filter ? `[${FILTER_LABELS[filter]}]` : FILTER_LABELS[filter], plain: true, onPress: () => io.change({ type: 'filter', filter }) }))))
+    children.push(text(`Models: ${FILTER_LABELS[state.filter]}`, true))
   } else {
-    children.push(text(requests === 0 ? 'No routed requests recorded yet.' : 'No model usage reported yet.'))
-    children.push(text(requests === 0 ? 'Tracking starts when Klyth is loaded.' : 'See Details for reporting coverage.', true))
+    children.push(...usageEmptyModels(session).pane.map((line, index) => text(line, index > 0)))
   }
   const rows = view.models
   const pages = Math.max(1, Math.ceil(rows.length / MODEL_PAGE))
   const page = Math.min(state.page, pages - 1)
   const shown = rows.slice(page * MODEL_PAGE, (page + 1) * MODEL_PAGE)
   if (pages > 1) children.push(toolbar([
-    text(`${page + 1} / ${pages}`, true),
-    ...(page > 0 ? [button('previous', 'Previous', () => io.change({ type: 'page', page: page - 1 }), 'p')] : []),
-    ...(page + 1 < pages ? [button('next', 'Next', () => io.change({ type: 'page', page: page + 1 }), 'n')] : []),
+    text(`Page ${usageNumber(page + 1)} of ${usageNumber(pages)}`, true),
+    ...(page > 0 ? [button('previous', 'Previous page', () => io.change({ type: 'page', page: page - 1 }), 'p')] : []),
+    ...(page + 1 < pages ? [button('next', 'Next page', () => io.change({ type: 'page', page: page + 1 }), 'n')] : []),
   ]))
-  if (hasModels && shown.length === 0) children.push(text('No models in this filter.', true))
+  if (hasModels && shown.length === 0) children.push(text('This group has no models. Select All to see all models.', true))
+  const names = usageModelNames(shown.map(row => row.target), Math.max(37, bodyColumns - 25))
   for (const row of shown) {
     const expanded = row.target === state.expanded
-    const label = usageDisplay(row.target, Math.max(24, Math.min(64, bodyColumns - 4)))
-    const name = Button({ key: `model-${row.target}`, plain: true, label: `${expanded ? 'Hide' : 'Show'} details: ${label}`, children: [text(`${expanded ? '▾' : '▸'} ${label}`)], onPress: () => io.change({ type: 'expand', target: row.target }) })
-    const rowChildren = [name, text(row.estimatedCost)]
-    children.push(Box({ flexDirection: bodyColumns >= 76 ? 'row' : 'column', justifyContent: 'space-between', columnGap: 2, marginTop: 1, children: rowChildren }))
-    children.push(toolbar([text(`In ${usageCompactTokens(row.totals.totalInput)}`, true), text(`Out ${usageCompactTokens(row.totals.output)}`, true), text(`Cache ${usageCacheRatio(row.cacheReadTokens, row.cacheInputTokens)}`, true), text(`${usageCompactNumber(row.requests)} requests`, true)]))
+    const label = names.get(row.target)!
+    const name = Button({ key: `model-${row.target}`, plain: true, label: `${expanded ? 'Hide' : 'Show'} model details: ${label}`, children: [text(`${expanded ? 'Hide' : 'Show'} model details: ${label}`)], onPress: () => io.change({ type: 'expand', target: row.target }) })
+    const rowChildren = [name, text(`Estimated cost: ${row.estimatedCost}`)]
+    children.push(Box({ flexDirection: 'column', marginTop: 1, children: rowChildren }))
+    children.push(toolbar([text(`Input tokens: ${usageCompactTokens(row.totals.totalInput)}`, true), text(`Output tokens: ${usageCompactTokens(row.totals.output)}`, true), text(`Input from cache: ${usageCacheRatio(row.cacheReadTokens, row.cacheInputTokens)}`, true), text(usageCount(row.requests, 'request'), true)]))
     if (expanded) {
       const details = usageModelDetails(row)
       const detailPages = Math.max(1, Math.ceil(details.length / DETAIL_PAGE))
       const detailPage = Math.min(state.detailPage, detailPages - 1)
       if (detailPages > 1) children.push(toolbar([
-        text(`Details ${detailPage + 1} / ${detailPages}`, true),
-        ...(detailPage > 0 ? [button('detail-previous', 'Previous details', () => io.change({ type: 'detail', page: detailPage - 1 }))] : []),
-        ...(detailPage + 1 < detailPages ? [button('detail-next', 'Next details', () => io.change({ type: 'detail', page: detailPage + 1 }))] : []),
+        text(`Model details: Page ${usageNumber(detailPage + 1)} of ${usageNumber(detailPages)}`, true),
+        ...(detailPage > 0 ? [button('detail-previous', 'Previous details page', () => io.change({ type: 'detail', page: detailPage - 1 }))] : []),
+        ...(detailPage + 1 < detailPages ? [button('detail-next', 'Next details page', () => io.change({ type: 'detail', page: detailPage + 1 }))] : []),
       ]))
       children.push(...details.slice(detailPage * DETAIL_PAGE, (detailPage + 1) * DETAIL_PAGE).map(line => text(line)))
     }
   }
-  children.push(Box({ marginTop: 1, children: [controls()] }), text('Esc to close', true))
-  if (state.diagnostics) children.push(Box({ flexDirection: 'column', marginTop: 1, children: [Text({ bold: true, children: 'Session details' }), ...usageSummary(session, contextTokens).slice(2).map(line => text(line))] }))
+  if (state.diagnostics) children.push(Box({ flexDirection: 'column', marginTop: 1, children: [Text({ bold: true, children: 'Session details' }), ...usageSummary(session, contextTokens, recordState).map(line => text(line))] }))
   return Box({ flexDirection: 'column', children })
 }
 

@@ -9,6 +9,7 @@ import type { SetupEvent, SetupFailure, SetupRequest } from './setup-protocol'
 export type HelperReadiness = { ready: boolean; mode: 'source' | 'compiled'; path?: string; reason?: string }
 export type HelperChild = { stdout: AsyncIterable<string>; exited: Promise<number>; cancel(): void }
 export type HelperRuntimePort = {
+  launcher?: Promise<string | undefined>
   extraClient?: ExtraClient
   root: string; home: string; configDir: string
   setTimer(callback: () => void, ms: number): () => void
@@ -47,11 +48,11 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
 const safePath = (value: string) => value.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(value) && !value.split('/').some(p => p === '.' || p === '..')
 
 export function createHelperRuntime(io: HelperRuntimePort) {
-  const env = { BUN_OPTIONS: '', CLAUDE_CONFIG_DIR: io.configDir, HOME: io.home }
+  const environment = () => ({ BUN_OPTIONS: '', CLAUDE_CONFIG_DIR: io.configDir, HOME: io.home })
   let selected: { readiness: HelperReadiness; cli: readonly string[]; daemon: readonly string[]; artifact?: HelperArtifact } | undefined
   let manifest: HelperManifest | undefined
   const fail = (message: string): never => { throw new Error(message) }
-  const run = (argv: readonly string[], timeoutMs = 5000) => io.run(argv, { timeoutMs, env })
+  const run = (argv: readonly string[], timeoutMs = 5000) => io.run(argv, { timeoutMs, env: environment() })
   async function inspectUnchecked(): Promise<HelperReadiness> {
     selected = undefined
     if (![io.root, io.home, io.configDir].every(safePath)) return fail('Invalid helper runtime paths')
@@ -135,6 +136,9 @@ export function createHelperRuntime(io: HelperRuntimePort) {
       if (!setupRequest(request)) return fail('Invalid setup request')
       if (signal.aborted) return fail('Setup cancelled')
       const command = await argv('cli')
+      let stopWait = () => {}
+      const launcher = io.launcher ? await Promise.race([io.launcher.catch(() => undefined), new Promise<undefined>(resolve => { stopWait = io.setTimer(() => resolve(undefined), 10000) })]).finally(() => stopWait()) : undefined
+      const env = { ...environment(), ...(launcher ? { KLYTH_LAUNCHER: launcher } : {}) }
       if (signal.aborted) return fail('Setup cancelled')
       let child: HelperChild
       try { child = await io.spawn([...command, '__setup'], { input: `${JSON.stringify(request)}\n`, env, timeoutMs: OAUTH_TIMEOUT, signal }) } catch { return fail('Could not start setup helper') }

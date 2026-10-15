@@ -20,7 +20,7 @@ this guide are GitHub URLs. After step 2, read the same files in the checkout.
 - You cannot approve a provider. The user chooses **Allow** in the prompt that Klyth shows.
 - Read `klyth.json` before you write to it. If the file exists, add to it. Never replace it.
 - Edit only `klyth.json`, and keep the existing entries. An auth helper may update its own provider entry, but only when
-  the user explicitly chooses `--write-config`. Read the config again after that, before your next edit.
+  the user explicitly chooses `--write`. Read the config again after that, before your next edit.
 - Leave Claude Code's settings and permissions alone. Suggest rules. Never add them.
 - If the user is moving from Styx, stop this fresh-install flow. Follow
   [Switch from Styx to Klyth](https://github.com/Trosfy/claude-klyth/blob/main/docs/PROVIDERS.md#switch-from-styx-to-klyth).
@@ -70,7 +70,18 @@ claude plugin install klyth@klyth
 ```
 
 Ask the user to tell you when both commands end. Claude Code loads Klyth in new sessions, not in the current session.
-Tell the user to run `/reload-plugins` or to start a new Claude Code session.
+Tell the user to run `/reload-plugins` or to start a new Claude Code session. On the first load, Klyth's hook installs the
+`klyth` command. You do not install this command. Klyth shows one notice after install. When `~/.local/bin` is in `PATH`,
+it says `Klyth installed the klyth command in ~/.local/bin. Type klyth --help in a terminal.` When it is not in `PATH`, it
+says `Klyth installed the klyth command in ~/.local/bin. Add ~/.local/bin to your PATH to use it.` After that load, ask
+the user to run `command -v klyth` in a terminal.
+
+If the command is missing, check these causes:
+
+- `~/.local/bin` is not in `PATH`. Add it to `PATH`, or run `~/.local/bin/klyth`.
+- Another program owns `~/.local/bin/klyth`. Klyth leaves that file unchanged. Use the fallback command in step 5.
+- The user removed `~/.local/bin/klyth`. Klyth does not install it again by itself. Move
+  `~/.local/share/klyth/launcher` to the Trash, then start a new Claude Code session.
 
 ## 4. Set up with `/klyth setup`
 
@@ -93,8 +104,8 @@ If the pane does not open and Klyth prints "Klyth setup needs an attached native
 
 ## 5. Set up by hand (fallback)
 
-Use this path only when `/klyth setup` is not available or when the user asks for it. The user runs each `bun run auth`
-command in the Klyth folder.
+Use this path only when `/klyth setup` is not available or when the user asks for it. The user runs `klyth auth`
+commands in a terminal. If `klyth` is missing, run `bun /absolute/path/to/klyth/scripts/cli.ts auth …` instead.
 
 ### Ask what to route to
 
@@ -112,8 +123,9 @@ recipe in [PROVIDERS.md](https://github.com/Trosfy/claude-klyth/blob/main/docs/P
 key, use
 [OpenAI Responses API (API key)](https://github.com/Trosfy/claude-klyth/blob/main/docs/PROVIDERS.md#openai-responses-api-api-key).
 
-For a ChatGPT plan, this guide covers only the registered-app sign-in. It uses `--chatgpt` and the base URL
-`https://api.openai.com/v1`. First read its eligibility and workspace limits in
+For a ChatGPT plan, this guide covers only the registered-app sign-in. It uses
+`klyth auth login chatgpt --provider <provider id>` and the base URL `https://api.openai.com/v1`. First read its eligibility
+and workspace limits in
 [the recipe](https://github.com/Trosfy/claude-klyth/blob/main/docs/PROVIDERS.md#openai-with-your-chatgpt-plan). Tell the
 user that this path and the direct API-key Responses path are not yet live-checked.
 
@@ -127,8 +139,8 @@ The file is `klyth.json` in `$CLAUDE_CONFIG_DIR`, or in `~/.claude` when that va
 [CONFIG.md](https://github.com/Trosfy/claude-klyth/blob/main/docs/CONFIG.md#providers) describes every key.
 
 - In `auth.command`, use the provider id as the Keychain account.
-- For a ChatGPT plan, the recipe's `token` command is a stand-in. The user's explicit `--write-config` choice replaces
-  it with the real paths (see "Store the key").
+- For a ChatGPT plan, the recipe's `token` command is a stand-in. The user's explicit `--write` choice replaces it with
+  the installed command paths (see "Store the key").
 - For a keyless endpoint, use `"auth": "none"`. Bedrock does not support keyless auth.
 
 Leave out the `classifier` key unless the user runs auto mode on an alias and asks for it. Before you add it, explain
@@ -141,23 +153,23 @@ Run the check in step 6. Then store the key.
 
 If the provider uses `"auth": "none"`, skip this section.
 
-Ask the user to run this command in their own terminal, in the Klyth folder:
+Ask the user to run this command in their own terminal:
 
 ```sh
-bun run auth login <provider id>
+klyth auth login api-key <provider id>
 ```
 
 The command asks for the key without echo and stores it in the Keychain (`secret-tool` on Linux). The example's key
-command works on macOS only. On Linux, the user adds `--write-config`, which writes the `secret-tool` command into
+command works on macOS only. On Linux, the user can add `--write` to write the `secret-tool` command into
 `providers.<provider id>.auth`. [Keys](https://github.com/Trosfy/claude-klyth/blob/main/docs/PROVIDERS.md#keys)
 describes other key stores.
 
-For a ChatGPT plan, the provider must already be in `klyth.json`. Tell the user that `--write-config` rewrites the
-`auth` entry of that provider. Ask the user to choose `--write-config` explicitly. Then ask the user to run this command
-in their own terminal:
+For a ChatGPT plan, the provider must already be in `klyth.json`. Tell the user that `--write` rewrites the `auth` entry
+of that provider. Ask the user to choose `--write` explicitly. Then ask the user to run this command in their own
+terminal:
 
 ```sh
-bun run auth login <provider id> --chatgpt --write-config
+klyth auth login chatgpt --provider <provider id> --write
 ```
 
 The command prints a URL, opens it and waits up to 5 minutes. The user finishes the browser step alone. For a browser on
@@ -167,7 +179,7 @@ A ChatGPT sign-in needs an available OS keyring. The command lists the model ids
 user, put those ids and their verified limits in `klyth.json`. Read the config again. Run the check in step 6 again.
 
 When the command ends, ask the user for the result. To check that the key exists, the user can run
-`bun run auth list <provider id>`. It does not print the key. A keyring read error does not mean that the item is
+`klyth auth status <provider id>`. It does not print the key. A keyring read error does not mean that the item is
 absent.
 
 ## 6. Check the config

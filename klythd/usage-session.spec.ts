@@ -173,7 +173,7 @@ test('A to B to native to A, compaction and repeated rate edits keep stable cano
   expect(view.models[0]!.costUsd).toBeCloseTo(0.504516, 12)
   const lines = usageText(current)
   expect(lines[1]).toBe(`Estimated cost: ${view.estimatedCost}`)
-  expect(lines.findIndex(line => line.startsWith('Estimated cost:'))).toBeLessThan(lines.findIndex(line => line.startsWith('Logical requests:')))
+  expect(lines.findIndex(line => line.startsWith('Estimated cost:'))).toBeLessThan(lines.findIndex(line => line.startsWith('Requests with records:')))
   expect(lines.join('\n')).not.toContain('rate snapshot')
   const host = hostPort(envelope)
   const reloaded = createUsageLifetime()
@@ -255,7 +255,7 @@ test('shared store rejection warns without suppressing subsequent known cost', a
   expect(life.snapshot()!.sessions[0]!.completedAttempts).toBe(2)
   expect(life.snapshot()!.sessions[0]!.costUsd).toBeCloseTo(0.000004, 14)
   expect(life.snapshot()!.sessions[0]!.warnings.persistenceFailure).toBe(true)
-  expect(usageText(life.snapshot()!.sessions[0]!).join('\n')).toContain('Checkpoint: Not saved')
+  expect(usageText(life.snapshot()!.sessions[0]!).join('\n')).toContain('Klyth could not save usage. Totals may be incomplete.')
 })
 
 

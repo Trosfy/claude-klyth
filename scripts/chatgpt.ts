@@ -59,7 +59,7 @@ export const FIELD = /^[\x21\x23-\x5b\x5d-\x7b\x7d\x7e]*$/
 // The refresh errors that end a sign-in (the item is kept, so the next login reuses its client id).
 const DEAD = /invalid_grant|invalid_refresh_token|refresh_token_expired|token_expired|refresh_token_invalidated|refresh_token_reused/
 type Method = 'v1' | ExtraMethod
-const methodPolicy = (io: ChatGptIo, method: Method) => method === 'v1' ? { url: OFFICIAL_PROFILE.tokenUrl, refresh: { resource: RESOURCE }, login: '--chatgpt' } : { url: io.extraSignIn!.refresh.tokenUrl, refresh: io.extraSignIn!.refresh.fields, login: io.extraSignIn!.refresh.loginFlags }
+const methodPolicy = (io: ChatGptIo, method: Method, p = '') => method === 'v1' ? { url: OFFICIAL_PROFILE.tokenUrl, refresh: { resource: RESOURCE }, login: `klyth auth login chatgpt --provider ${p}` } : { url: io.extraSignIn!.refresh.tokenUrl, refresh: io.extraSignIn!.refresh.fields, login: io.extraSignIn!.refresh.loginHint(p) }
 
 // The keyring item: <method>|<client id>|<refresh token>|<expires at, epoch s>|<earliest_refresh_at as given>|<access token>.
 type Item = { method: Method; clientId: string; refresh: string; expiresAt: number; earliest: string; access: string }
@@ -89,8 +89,8 @@ export const tokenCommand = (p: string) => [process.execPath, join(import.meta.d
 // The provider's item, or the line saying why there is none.
 async function readItem(io: ChatGptIo, p: string): Promise<Item | string> {
   const r = await io.run(io.store.read(p))
-  if (r.exitCode !== 0) return `no ChatGPT sign-in readable for ${p} in the ${io.store.name} (locked, or none stored); run bun run auth login ${p} --chatgpt`
-  return parseItem(r.stdout.trim(), io.extraSignIn) ?? `${p}'s item in the ${io.store.name} is not a ChatGPT sign-in; run bun run auth login ${p} --chatgpt`
+  if (r.exitCode !== 0) return `no ChatGPT sign-in readable for ${p} in the ${io.store.name} (locked, or none stored). Run klyth auth login chatgpt --provider ${p}`
+  return parseItem(r.stdout.trim(), io.extraSignIn) ?? `${p}'s item in the ${io.store.name} is not a ChatGPT sign-in. Run klyth auth login chatgpt --provider ${p}`
 }
 
 // Writes the item and reads it back: undefined once it reads back intact, else the failure line and whether the
@@ -101,7 +101,7 @@ async function save(io: ChatGptIo, p: string, value: string): Promise<{ line: st
   const added = await io.run(add.argv, add.input)
   if (added.exitCode !== 0) return { line: `the ${io.store.name} refused the sign-in (exit ${added.exitCode}); unlock it, then retry`, untouched: false }
   const back = await io.run(io.store.read(p))
-  return back.exitCode === 0 && back.stdout.trim() === value ? undefined : { line: `stored, but reading ${p} back did not give the same sign-in (exit ${back.exitCode}); run logout ${p}, then login again`, untouched: false }
+  return back.exitCode === 0 && back.stdout.trim() === value ? undefined : { line: `Stored, but reading ${p} back did not give the same sign-in (exit ${back.exitCode}). Run klyth auth logout ${p}. Then run ${methodPolicy(io, parseItem(value, io.extraSignIn)?.method ?? 'v1', p).login}.`, untouched: false }
 }
 
 // Stores a piped item (export's output) unchanged; the failure line, or undefined.
@@ -374,10 +374,10 @@ type Out = { access: string; note?: string } | { exit: number; note: string }
 async function renew(io: ChatGptIo, p: string): Promise<Out> {
   const it = await readItem(io, p)
   if (typeof it === 'string') return { exit: 1, note: it }
-  const m = methodPolicy(io, it.method)
+  const m = methodPolicy(io, it.method, p)
   const now = io.now()
   const current = (note: string): Out => (valid(it, now) ? { access: it.access, note } : { exit: 1, note })
-  const dead: Out = { exit: 3, note: `the ChatGPT sign-in expired or was revoked; run bun run auth login ${p} ${m.login}` }
+  const dead: Out = { exit: 3, note: `The ChatGPT sign-in expired or ChatGPT revoked it. Run ${m.login}` }
   const refuses = (at: number | undefined): Out => (valid(it, now) ? { access: it.access } : { exit: 4, note: `ChatGPT refuses a refresh until ${at === undefined || Number.isNaN(at) ? 'later' : new Date(at).toISOString()}; retry then` })
   if (fresh(it, now)) return { access: it.access }
   if (it.clientId === '') return valid(it, now) ? { access: it.access } : dead
@@ -394,10 +394,10 @@ async function renew(io: ChatGptIo, p: string): Promise<Out> {
     if (unsaved === undefined) return { access: next.access }
     // Refused before any write (too long for the store): the stored item stays as it was, and no token is printed.
     if (unsaved.untouched) return { exit: 1, note: unsaved.line }
-    return { access: next.access, note: `refreshed, but storing the new sign-in failed; the next refresh will need bun run auth login ${p} ${m.login}` }
+    return { access: next.access, note: `The refresh succeeded. Klyth could not store the sign-in. Before the next refresh, run ${m.login}` }
   }
   if ('failed' in a) return current(`the ChatGPT refresh failed (${a.failed}); retry`)
-  if (a.status === 200) return { exit: 1, note: `ChatGPT answered the refresh with no usable token; run bun run auth login ${p} ${m.login}` }
+  if (a.status === 200) return { exit: 1, note: `ChatGPT sent no usable token response. Run ${m.login}` }
   if (a.text.includes('invalid_client')) return it.method !== 'v1' ? { exit: 3, note: io.extraSignIn!.refresh.refusedClient(p) } : (await save(io, p, format({ ...it, clientId: '' })), dead)
   if (DEAD.test(a.text)) return dead
   if (/earliest_refresh|too.early/i.test(a.text)) return refuses(earliestOf(String(a.body['earliest_refresh_at'] ?? '')))
@@ -434,7 +434,7 @@ export async function token(io: ChatGptIo, p: string): Promise<number> {
 // under the lock again, once the whole write completed and only while the item is still the one written.
 export async function exportItem(io: ChatGptIo, p: string): Promise<number> {
   const fail = (why: string) => (io.err(`klyth auth: ${why}`), 1)
-  if (io.stdoutIsTTY) return io.err(`klyth auth: export prints your ChatGPT refresh token; pipe it: bun run auth export ${p} | ssh <host> 'cd <klyth-checkout> && bun run auth login ${p}'`), 2
+  if (io.stdoutIsTTY) return io.err(`klyth auth: Export prints your ChatGPT refresh token. First run ssh <host> '"$HOME/.local/bin/klyth" --version'. Then pipe it: klyth auth export ${p} | ssh <host> '"$HOME/.local/bin/klyth" auth import ${p}'`), 2
   const lock = io.lock(p)
   // `work` under the lock; `held` is the answer while another process holds it.
   const locked = async <T>(held: string, work: () => Promise<T>): Promise<T | string> => {
@@ -454,7 +454,7 @@ export async function exportItem(io: ChatGptIo, p: string): Promise<number> {
   const gone = await locked(changed, async () => {
     const now = await io.run(io.store.read(p))
     if (now.exitCode !== 0 || now.stdout.trim() !== value) return changed
-    return (await io.run(io.store.del(p))).exitCode === 0 ? undefined : `${p}: sign-in written, but removing it from the ${io.store.name} failed; run logout ${p} before this machine refreshes it`
+    return (await io.run(io.store.del(p))).exitCode === 0 ? undefined : `${p}: sign-in written, but removing it from the ${io.store.name} failed. Run klyth auth logout ${p} before this machine refreshes it`
   })
   if (gone !== undefined) return fail(gone)
   io.err(`klyth auth: ${p}: sign-in moved; its item is removed from the ${io.store.name}`)

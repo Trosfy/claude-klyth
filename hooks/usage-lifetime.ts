@@ -92,7 +92,7 @@ export function createUsageLifetime() {
     if (reason === 'error') memoryOnly = true
     else { fenced = true; warn('trackingGap') }
     warn('persistenceFailure')
-    try { ports?.log(reason === 'error' ? 'klyth usage: state could not be published; accounting continues in memory' : 'klyth usage: publication owner is stale or unavailable; awaiting a fresh lifecycle owner') } catch {}
+    try { ports?.log(reason === 'error' ? 'Klyth could not update the usage record. It continues to count usage in this session. Print this report to keep the current totals.' : 'Klyth cannot update this usage record. Print this report to keep the current totals.') } catch {}
   }
 
   async function writeState(port: UsagePort) {
@@ -141,7 +141,7 @@ export function createUsageLifetime() {
           lastCheckpointFailure = now
           warn('persistenceFailure')
           changed(false)
-          try { port.log('klyth usage: checkpoint could not be saved; current in-memory totals remain available') } catch {}
+          try { port.log('Klyth could not save usage. Print this report to keep the current totals.') } catch {}
         }
       }
     })
@@ -305,7 +305,7 @@ export function createUsageLifetime() {
       warn('trackingGap')
       warn('persistenceFailure')
       warn('earlierUnavailable')
-      port.log('klyth usage: saved state has an unknown or invalid schema; keeping usage in memory without replacing it')
+      port.log('Klyth cannot read the saved usage record. It will count new usage without replacing that record. Print this report to keep the current totals.')
     } else if (current !== undefined) {
       const matching = current.sessions.some(item => item.id === id)
       live = interruptPending(current, now, current.ownerGeneration)
@@ -326,7 +326,7 @@ export function createUsageLifetime() {
       warn('trackingGap')
       warn('persistenceFailure')
       warn('earlierUnavailable')
-      port.log('klyth usage: checkpoint has an unknown or invalid schema; keeping usage in memory without replacing it')
+      port.log('Klyth cannot read the saved usage record. It will count new usage without replacing that record. Print this report to keep the current totals.')
     } else {
       live = createUsageEnvelope(id, now)
       sequence = 0
@@ -360,6 +360,7 @@ export function createUsageLifetime() {
 
   return {
     observer,
+    recordState: () => fenced ? 'fenced' as const : 'active' as const,
     async bindTranscript(port: UsagePort, sessionId: string, path: string) {
       if (live === undefined || warm || fenced) return
       const next = bindUsageTranscript(live, sessionId, path)
@@ -381,7 +382,7 @@ export function createUsageLifetime() {
     async text(port: UsagePort) {
       const context = await port.context().catch(() => undefined)
       const current = session(live)
-      return current === undefined ? ['klyth usage: unavailable; no active session record'] : usageText(current, context)
+      return usageText(current, context, fenced ? 'fenced' : 'active')
     },
     snapshot: () => live === undefined ? undefined : structuredClone(live),
   }

@@ -1,6 +1,6 @@
 // The provider transport: one fetch per request over Bun's keep-alive pool. https only (http too where the
 // provider allows it), no redirect followed, a TCP connect check bounded at 15 s, a stall window from the
-// request until the headers and between reads, and a bound on the whole request. Aborting `signal` (the
+// request until the headers and between reads, and an optional bound on the whole request. Aborting `signal` (the
 // client went away), even before the request starts, cancels it; `cancel` ends an answer whose body was
 // never read. Bun's own 300 s idle cut is off: the stall window replaces it.
 import { MAX_TIMEOUT_MS } from '../hooks/config'
@@ -32,7 +32,7 @@ export async function post(r: UpstreamRequest, signal: AbortSignal): Promise<Ans
   const ac = new AbortController()
   let why: Cut | undefined
   const cutBy = (c: Cut) => ((why ??= c), ac.abort())
-  const total = setTimeout(() => cutBy({ kind: 'total', detail: String(r.totalS) }), Math.min(r.totalS * 1000, MAX_TIMEOUT_MS))
+  const total = r.totalS !== undefined && Number.isFinite(r.totalS) && r.totalS > 0 ? setTimeout(() => cutBy({ kind: 'total', detail: String(r.totalS) }), Math.min(r.totalS * 1000, MAX_TIMEOUT_MS)) : undefined
   let stall: ReturnType<typeof setTimeout> | undefined
   const arm = () => (clearTimeout(stall), (stall = setTimeout(() => cutBy({ kind: 'stall', detail: String(r.stallS) }), r.stallS * 1000)))
   const release = () => (clearTimeout(stall), clearTimeout(total))

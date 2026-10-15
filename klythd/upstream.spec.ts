@@ -1,7 +1,7 @@
 // The provider transport against a local server on 127.0.0.1: the User-Agent exactly as given (never Bun's
 // own), https only unless allowed, no redirect followed, a stall window before the headers and between
 // reads, a bound on the whole request, a refused connection, and a cancel that reaches the server.
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, spyOn, test } from 'bun:test'
 
 import type { UpstreamRequest } from './step'
 import { post } from './upstream'
@@ -47,7 +47,6 @@ const req = (path: string, o: Partial<UpstreamRequest> = {}): UpstreamRequest =>
   headers: { 'content-type': 'application/json', 'user-agent': UA, authorization: 'Bearer k' },
   body: '{}',
   stallS: 600,
-  totalS: 1800,
   ...o,
 })
 async function read(path: string, o: Partial<UpstreamRequest> = {}, signal = new AbortController().signal) {
@@ -125,4 +124,69 @@ test('cancel ends an answer whose body was never read: the server sees the clien
   a.cancel()
   for (let i = 0; i < 50 && gone.filter(p => p === '/held').length < 2; i++) await Bun.sleep(20)
   expect(gone.filter(p => p === '/held')).toHaveLength(2)
+})
+
+// Controlled transport ports let the production timers expire without wall-clock waits or a provider.
+async function timed(totalS: number | undefined, check: (a: Awaited<ReturnType<typeof post>>, fire: (ms: number) => void, delays: number[]) => Promise<void>) {
+  let id = 0
+  const timers = new Map<number, { ms: number; run: () => void }>()
+  const delays: number[] = []
+  const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms: number) => {
+    delays.push(ms)
+    timers.set(++id, { ms, run })
+    return id
+  }) as unknown as typeof setTimeout)
+  const clear = spyOn(globalThis, 'clearTimeout').mockImplementation((handle) => { timers.delete(Number(handle)) })
+  const connect = spyOn(Bun, 'connect').mockResolvedValue({} as never)
+  const fetcher = spyOn(globalThis, 'fetch').mockImplementation((async (_url: unknown, init?: RequestInit) => new Response(new ReadableStream({
+    start(c) {
+      c.enqueue(enc.encode('tick'))
+      init?.signal?.addEventListener('abort', () => c.error(new Error('aborted')), { once: true })
+    },
+  }))) as typeof fetch)
+  let answer: Awaited<ReturnType<typeof post>> | undefined
+  try {
+    answer = await post(req('/clock', totalS === undefined ? {} : { totalS }), new AbortController().signal)
+    await check(answer, ms => {
+      const found = [...timers].find(([, t]) => t.ms === ms)
+      expect(found, `active timer for ${ms} ms`).toBeDefined()
+      if (found) { timers.delete(found[0]); found[1].run() }
+    }, delays)
+    expect(delays.every(ms => Number.isFinite(ms) && ms > 0)).toBe(true)
+  } finally {
+    if (answer && 'status' in answer) answer.cancel()
+    fetcher.mockRestore()
+    connect.mockRestore()
+    clear.mockRestore()
+    timer.mockRestore()
+  }
+}
+
+test('an absent or invalid total bound arms no total timer: no NaN, zero or Infinity reaches setTimeout', async () => {
+  for (const totalS of [undefined, NaN, 0, Infinity, -1]) await timed(totalS, async (a, _fire, delays) => {
+    expect(a).toHaveProperty('status', 200)
+    expect(delays).toEqual([15_000, 600_000])
+  })
+})
+
+test('an unbounded transport still cuts after 600 s without data', async () => {
+  await timed(undefined, async (a, fire, delays) => {
+    if ('cut' in a) throw new Error('no answer')
+    expect(new TextDecoder().decode((await a.body.next()).value as Uint8Array)).toBe('tick')
+    const pending = a.body.next()
+    fire(600_000)
+    expect(await pending).toEqual({ done: true, value: { kind: 'stall', detail: '600' } })
+    expect(delays).toEqual([15_000, 600_000, 600_000, 600_000])
+  })
+})
+
+test('a finite transport bound still arms and expires the total timer', async () => {
+  await timed(20, async (a, fire, delays) => {
+    if ('cut' in a) throw new Error('no answer')
+    await a.body.next()
+    const pending = a.body.next()
+    fire(20_000)
+    expect(await pending).toEqual({ done: true, value: { kind: 'total', detail: '20' } })
+    expect(delays).toContain(20_000)
+  })
 })

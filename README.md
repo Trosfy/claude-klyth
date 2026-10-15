@@ -43,7 +43,8 @@ Do it yourself in five steps:
    claude plugin install klyth@klyth
    ```
 
-2. Start a new Claude Code session, or run `/reload-plugins`.
+2. Start a new Claude Code session, or run `/reload-plugins`. On this first load, Klyth installs the `klyth` command in
+   `~/.local/bin`.
 3. Run `/klyth setup`. Choose ChatGPT, Amazon Bedrock, an OpenAI-compatible endpoint or another API provider.
 4. Connect the provider and choose a model. ChatGPT opens a sign-in page in your browser. For an API key, setup shows a
    command with a hidden prompt. Never paste a key into the chat.
@@ -77,8 +78,8 @@ The `kind` is the API that the endpoint speaks. Use the kind that the provider d
   [Which subagents run on an alias](docs/TROUBLESHOOTING.md#which-subagents-run-on-an-alias) gives the rules.
 - **See the state:** `/klyth` shows each provider, alias, routed subagent and recent step. `/klyth reload` reads
   `klyth.json` again.
-- **See usage and cost:** `/klyth usage` opens a usage pane. Set model rates under
-  [`pricing`](docs/CONFIG.md#pricing-and-usage) to see estimated cost.
+- **See usage and cost:** `/klyth usage` opens the usage pane. Add model prices under
+  [`pricing`](docs/CONFIG.md#pricing-and-usage) in `klyth.json` to see `Estimated cost:`.
 - **Compact:** `/klyth compact` queues the built-in `/compact` when the conversation is idle. The routed model writes
   the summary. See
   [Compaction](docs/CONFIG.md#compaction).
@@ -132,15 +133,18 @@ It can contain prompts and other private data.
 - **Keys:** Klyth gets each key from a helper command, for example the macOS Keychain. The built-in helper keeps keys
   out of `klyth.json`, command lines, environment variables and logs. Do not put a key in the arguments of a custom
   helper.
-- **Approval:** Klyth sends nothing to a provider until you approve it. The approval covers the provider's kind,
-  address and key command. A change to one of these needs a new approval.
+- **Approval:** Klyth sends nothing to a provider until you approve it. The approval binds to the provider kind, origin
+  and full command argv. It does not bind to the launcher's contents, the Klyth release, Bun or a script hash. A Klyth
+  update changes the code that runs under an approved launcher command. To require approval for each release, set
+  `auth.command` to that release's own `scripts/cli.ts` path. The line 2 marker shows ownership. It is not an authenticity
+  check.
 - **Your data:** a routed turn sends its prompts, the files the model reads and the tool output to the provider. Route
   only to providers that may get that data.
 - **HTTPS:** use HTTPS or an encrypted tunnel. Plain HTTP needs `"allowHttp": true` and sends everything in clear text.
 - **Permissions:** routed subagents get the same permission checks as other actions. An optional
   [classifier](docs/CONFIG.md#classifier) can give auto mode's verdict on a routed turn.
 - **Limit:** Claude Code's Bash tool can read your Keychain item. Deny `security find-generic-password` and
-  `Bash(bun run auth *)` in `/permissions`.
+  `Bash(klyth auth *)` in `/permissions`.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 

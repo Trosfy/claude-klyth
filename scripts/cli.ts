@@ -18,6 +18,7 @@ import { credentialPresence, keychain, secretTool } from './credential-store'
 import type { ExtraClientId, ExtraMethod } from './extras'
 import { extraSignIn } from './extras'
 import { setupEntry } from './setup'
+import { validLauncher } from './launcher'
 
 declare const KLYTH_COMPILED: boolean
 declare const KLYTH_VERSION: string
@@ -44,6 +45,8 @@ export function tokenCommandFor(provider: string, runtime: { compiled: boolean; 
 }
 
 function runtimeTokenCommand(provider: string): readonly string[] {
+  const launcher = validLauncher(process.env, process.env['HOME'] ?? homedir())
+  if (launcher) return [launcher, 'auth', 'token', provider]
   const compiled = isCompiled()
   return tokenCommandFor(provider, {
     compiled,
@@ -58,7 +61,7 @@ function rootHelp(short = false): string {
     : 'Klyth — local auth and diagnostics\n\nUsage: klyth <command>\n\nCommands:\n  auth     Sign in, inspect, or manage provider credentials\n  doctor   Check local configuration, helper version, and keyring tools\n\nOptions:\n  --help      Show help\n  --version   Show version'
 }
 
-const AUTH_HELP = 'Usage: klyth auth <command>\n\nCommands:\n  login      Sign in with ChatGPT or store an API key\n  status     Show local config validity and credential presence\n  logout     Remove a stored credential\n  token      Print a current ChatGPT access token for a helper\n  export     Move a ChatGPT sign-in through a pipe\n  migrate    Explicitly migrate a legacy credential\n\nRun klyth auth <command> --help for command help.'
+const AUTH_HELP = 'Usage: klyth auth <command>\n\nCommands:\n  login      Sign in with ChatGPT or store an API key\n  status     Show local config validity and credential presence\n  logout     Remove a stored credential\n  token      Print a current ChatGPT access token for a helper\n  import     Read a ChatGPT sign-in from stdin\n  export     Move a ChatGPT sign-in through a pipe\n  migrate    Explicitly migrate a legacy credential\n\nRun klyth auth <command> --help for command help.'
 const LOGIN_HELP = 'Usage: klyth auth login <method> [options]\n\nMethods:\n  chatgpt                Official ChatGPT browser sign-in (default)\n  api-key <provider-id>  Store an API key from a hidden prompt or explicit stdin\n\nChatGPT options:\n  --client official      Select the official registered-app flow (default)\n  --provider <id>        Provider/keyring ID (default: chatgpt)\n  --write, --write-config  Update auth.command on an existing provider\n  --port <n>             Callback port (official flow only; default: 1455)\n  --no-browser           Do not open the authorization page\n\nWithout --write, login stores the credential and prints the config change needed; it never edits config.\nAPI keys are never accepted as command-line arguments.'
 const API_KEY_HELP = 'Usage: klyth auth login api-key <provider-id> [--write] [--stdin]\n\nReads an API key from a hidden terminal prompt. In non-interactive use, --stdin is required and explicitly reads the key from stdin. No key option or positional secret is accepted. --write updates auth.command only on an existing valid provider; without it, a key may be stored for an ID not yet in config. A stored ChatGPT credential is not replaced; run klyth auth logout <provider-id> first or choose another provider.'
 const CHATGPT_HELP = 'Usage: klyth auth login chatgpt [--client official] [--provider <id>] [--write|--write-config] [--port <n>] [--no-browser] A credential for a different method or client is not replaced; run klyth auth logout <provider-id> first or choose another provider.'
@@ -70,7 +73,7 @@ const MIGRATE_HELP = 'Usage: klyth auth migrate <provider-id> --from styx --runt
 
 function helpText(args: readonly string[], io: CliIo): string {
   if (args[0] !== 'login') {
-    return ({ status: STATUS_HELP, logout: LOGOUT_HELP, token: TOKEN_HELP, export: EXPORT_HELP, migrate: MIGRATE_HELP } as Record<string, string>)[args[0] ?? ''] ?? AUTH_HELP
+    return ({ status: STATUS_HELP, logout: LOGOUT_HELP, token: TOKEN_HELP, export: EXPORT_HELP, import: 'Usage: klyth auth import <provider-id> [--write]\n\nRead a sign-in record from stdin.', migrate: MIGRATE_HELP } as Record<string, string>)[args[0] ?? ''] ?? AUTH_HELP
   }
   return args[1] === 'api-key' ? API_KEY_HELP : (args[1] === 'chatgpt' ? CHATGPT_HELP : LOGIN_HELP) + (io.extraSignIn?.help ?? '')
 }
@@ -250,7 +253,7 @@ async function invokeLegacy(io: CliIo, args: readonly string[], stdin = false, p
   const adapted: CliIo = {
     ...io,
     tokenCommand: io.tokenCommand ?? runtimeTokenCommand,
-    err: message => io.err(legacyImport ? 'klyth auth: looks like a sign-in record; nothing stored; credential-record import remains available only through the legacy bun run auth path' : replacementBlocked ? replacementMessage() : message),
+    err: message => io.err(legacyImport ? 'klyth auth: This looks like a sign-in record. Nothing stored. Use klyth auth import <provider-id> to read a sign-in record' : replacementBlocked ? replacementMessage() : message),
     out: message => {
       if (policy?.method === 'official' && message.startsWith('https://auth.openai.com/api/accounts/authorize?')) {
         try { expectedState = new URL(message).searchParams.get('state') ?? undefined } catch {}
@@ -316,6 +319,12 @@ async function auth(args: readonly string[], io: CliIo): Promise<number> {
       return invokeLegacy(io, legacy, options.stdin, { provider: options.provider, method: 'api-key' })
     }
     return usageError(io, 'choose chatgpt or api-key')
+  }
+  if (command === 'import') {
+    const provider = rest[0]
+    if (!provider || !validId(provider) || rest.length > 2 || (rest.length === 2 && rest[1] !== '--write')) return fail(io, 'Usage: klyth auth import <provider-id> [--write]')
+    if (io.stdinIsTTY || !io.readStdin) return fail(io, 'Read a sign-in record from stdin. Use klyth auth export on the other machine.', 1)
+    return authCli(['import', provider, ...(rest.length === 2 ? ['--write-config'] : [])], { ...io, readKey: io.readStdin, tokenCommand: io.tokenCommand ?? runtimeTokenCommand })
   }
   if (command === 'status') return status(io, rest)
   if (command === 'logout' || command === 'token' || command === 'export') {

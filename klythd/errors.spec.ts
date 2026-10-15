@@ -45,14 +45,14 @@ test('an HTML page (a gateway edge answering before the API) is named as a gatew
 
 test('every other status says what failed and the fix for its class, redacted, on one line, at most 300 characters of the message', () => {
   expect(http(401, `{"error":{"message":"Authentication Error, Invalid proxy server token passed. Received API Key = ${SK}","type":"auth_error"}}`)).toBe(
-    'klyth: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry',
+    'klyth: acme rejected its key (HTTP 401). Store a valid one with klyth auth login api-key acme, then retry',
   )
   expect(http(400, '{"error":{"message":"Violated guardrail policy: prompt blocked","type":"None","code":"400"}}')).toBe(
     'klyth: acme refused the request under its content policy (HTTP 400): Violated guardrail policy: prompt blocked. Rephrase it, or use another model',
   )
   expect(http(500, `{"error":{"message":"upstream exploded with ${SK}"}}`)).toBe('klyth: acme HTTP 500: upstream exploded with [REDACTED]; the provider failed: retry, or pick another model')
   expect(http(429, '{"error":{"message":"slow down"}}')).toBe('klyth: acme HTTP 429: slow down; rate limited: wait, then retry')
-  expect(http(403, '{"error":{"message":"Access denied for this route"}}')).toBe('klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with bun run auth login acme')
+  expect(http(403, '{"error":{"message":"Access denied for this route"}}')).toBe('klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with klyth auth login api-key acme')
   expect(http(404, '{"detail":"Not Found"}')).toBe('klyth: acme HTTP 404: Not Found; check providers.acme.baseUrl and the model id model-a')
   expect(http(422, JSON.stringify({ error: { message: 'bad param\nsecond line' } }))).toBe('klyth: acme HTTP 422: bad param second line; check the params of model-a in klyth.json')
   expect(http(503, '')).toBe('klyth: acme HTTP 503: no error message; the provider failed: retry, or pick another model')
@@ -65,27 +65,27 @@ test('a ChatGPT plan-usage code names its fix, before the status and content-pol
   const body = (code: string, message = 'denied') => JSON.stringify({ error: { message, code } })
   const cases: [number, string, string][] = [
     [429, 'subscription_sharing_usage_limit_exceeded', "your ChatGPT plan's usage limit for klyth is reached; wait for it to reset, or raise it in ChatGPT settings"],
-    [403, 'subscription_sharing_user_not_eligible', 'this ChatGPT plan cannot be used in other apps; use an API key (bun run auth login acme, kind openai or openai-responses)'],
-    [401, 'subscription_sharing_invalid_user', 'sign in again with bun run auth login acme --chatgpt'],
-    [400, 'subscription_sharing_route_not_supported', "this model or route is not available on ChatGPT plan usage; pick a model from bun run auth login acme --chatgpt's list"],
+    [403, 'subscription_sharing_user_not_eligible', 'This ChatGPT plan does not permit other apps. Use an API key (klyth auth login api-key acme, kind openai or openai-responses)'],
+    [401, 'subscription_sharing_invalid_user', 'sign in again with klyth auth login chatgpt --provider acme'],
+    [400, 'subscription_sharing_route_not_supported', "ChatGPT plan usage does not include this model or route. Pick a model from klyth auth login chatgpt --provider acme's list"],
     [400, 'subscription_sharing_unsupported_capability', "ChatGPT plan usage does not support an input, tool or param of this request; set the model's vision to false, or drop the one the message names"],
     [503, 'subscription_sharing_usage_unavailable', 'ChatGPT plan usage is unavailable for this account right now; retry later, or use an API key'],
     [503, 'subscription_sharing_user_unavailable', 'ChatGPT plan usage is unavailable for this account right now; retry later, or use an API key'],
     [503, 'chatpass_v2_foo', 'ChatGPT plan usage is unavailable for this account right now; retry later, or use an API key'],
   ]
   for (const [status, code, fix] of cases) expect(http(status, body(code))).toBe(`klyth: acme HTTP ${status}: denied; ${fix}`)
-  expect(knownFix('acme', 'error subscription_sharing_invalid_user')).toBe('sign in again with bun run auth login acme --chatgpt')
-  expect(http(403, body('subscription_sharing_user_not_eligible', 'blocked by policy'))).toContain('this ChatGPT plan cannot be used in other apps')
+  expect(knownFix('acme', 'error subscription_sharing_invalid_user')).toBe('sign in again with klyth auth login chatgpt --provider acme')
+  expect(http(403, body('subscription_sharing_user_not_eligible', 'blocked by policy'))).toContain('This ChatGPT plan does not permit other apps')
   expect(http(429, body('subscription_sharing_other'))).toBe('klyth: acme HTTP 429: denied; rate limited: wait, then retry')
-  expect(http(401, body('subscription_sharing_other'))).toBe('klyth: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry')
+  expect(http(401, body('subscription_sharing_other'))).toBe('klyth: acme rejected its key (HTTP 401). Store a valid one with klyth auth login api-key acme, then retry')
   expect(knownFix('acme', '')).toBeUndefined()
 })
 
 test('a 401 or 403 from a provider with auth "none" says it wants a key and names the fix, on one line', () => {
-  const FIX = 'run bun run auth login acme and set auth.command'
-  expect(httpErrorText(FREE, 401, '{"error":{"message":"Authentication Error, no api key passed"}}', 'model-a')).toBe(`klyth: acme wants a key (HTTP 401) but auth is "none"; ${FIX}, then retry`)
+  const FIX = 'run klyth auth login api-key acme and set auth.command'
+  expect(httpErrorText(FREE, 401, '{"error":{"message":"Authentication Error, no api key passed"}}', 'model-a')).toBe(`klyth: acme wants a key (HTTP 401) but auth is "none". Run ${FIX.slice(4)}, then retry`)
   expect(httpErrorText(FREE, 403, '{"error":{"message":"Access denied for this route"}}', 'model-a')).toBe(
-    `klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access; if it wants a key, ${FIX} (auth is "none")`,
+    `klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access. If it wants a key, ${FIX} (auth is "none")`,
   )
   expect(httpErrorText(FREE, 429, '{"error":{"message":"slow down"}}', 'model-a')).toBe('klyth: acme HTTP 429: slow down; rate limited: wait, then retry')
 })

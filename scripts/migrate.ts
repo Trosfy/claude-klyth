@@ -54,7 +54,7 @@ export async function migrate(io: MigrationIo, provider: string, source: Store, 
   finally { for (const lock of held.reverse()) lock.release() }
 }
 
-export const MIGRATE_USAGE = 'bun run auth migrate <provider> --from styx --runtimes-stopped [--retire-source]'
+export const MIGRATE_USAGE = 'klyth auth migrate <provider> --from styx --runtimes-stopped [--retire-source]'
 export async function migrateCli(args: readonly string[], io: Pick<Ports, 'lock' | 'pid' | 'alive' | 'now'> & { extraSignIn?: ExtraSignIn<ExtraClientId, ExtraMethod>; platform: string; which(name: string): string | undefined; run: Run; configPath: string; out(line: string): void; err(line: string): void }): Promise<number> {
   const [provider, ...flags] = args
   const at = flags.indexOf('--from')

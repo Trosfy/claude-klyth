@@ -54,9 +54,9 @@ const UNAVAILABLE = 'ChatGPT plan usage is unavailable for this account right no
 // The fix for a ChatGPT plan-usage error, by the code its type carries (`chatpass_v2` is a family, so a substring); undefined for any other error.
 const FIXES: [code: string, fix: (id: string) => string][] = [
   ['subscription_sharing_usage_limit_exceeded', () => "your ChatGPT plan's usage limit for klyth is reached; wait for it to reset, or raise it in ChatGPT settings"],
-  ['subscription_sharing_user_not_eligible', id => `this ChatGPT plan cannot be used in other apps; use an API key (bun run auth login ${id}, kind openai or openai-responses)`],
-  ['subscription_sharing_invalid_user', id => `sign in again with bun run auth login ${id} --chatgpt`],
-  ['subscription_sharing_route_not_supported', id => `this model or route is not available on ChatGPT plan usage; pick a model from bun run auth login ${id} --chatgpt's list`],
+  ['subscription_sharing_user_not_eligible', id => `This ChatGPT plan does not permit other apps. Use an API key (klyth auth login api-key ${id}, kind openai or openai-responses)`],
+  ['subscription_sharing_invalid_user', id => `sign in again with klyth auth login chatgpt --provider ${id}`],
+  ['subscription_sharing_route_not_supported', id => `ChatGPT plan usage does not include this model or route. Pick a model from klyth auth login chatgpt --provider ${id}'s list`],
   ['subscription_sharing_unsupported_capability', () => "ChatGPT plan usage does not support an input, tool or param of this request; set the model's vision to false, or drop the one the message names"],
   ['subscription_sharing_usage_unavailable', () => UNAVAILABLE],
   ['subscription_sharing_user_unavailable', () => UNAVAILABLE],
@@ -86,11 +86,11 @@ export function httpErrorText(p: ProviderConfig, status: number, body: string, m
     const shown = allowed.length > 12 ? `${allowed.slice(0, 12).join(', ')} (+${allowed.length - 12} more)` : allowed.join(', ')
     return `klyth: your key for ${p.id} can't use ${model}${shown ? `; allowed: ${shown}` : ''}. Pick an allowed model, or ask the gateway's admin for access`
   }
-  if (status === 401) return p.auth === 'none' ? `klyth: ${p.id} wants a key (HTTP 401) but auth is "none"; run bun run auth login ${p.id} and set auth.command, then retry` : `klyth: ${p.id} rejected its key (HTTP 401); store a valid one with bun run auth login ${p.id}, then retry`
+  if (status === 401) return p.auth === 'none' ? `klyth: ${p.id} wants a key (HTTP 401) but auth is "none". Run klyth auth login api-key ${p.id} and set auth.command, then retry` : `klyth: ${p.id} rejected its key (HTTP 401). Store a valid one with klyth auth login api-key ${p.id}, then retry`
   if (POLICY_ERROR.test(`${type} ${message}`)) return `klyth: ${p.id} refused the request under its content policy (HTTP ${status}): ${said}. Rephrase it, or use another model`
   const fixes: Record<number, string> = {
     429: `rate limited${after}: wait, then retry`,
-    403: p.auth === 'none' ? `ask the ${p.id} admin for access; if it wants a key, run bun run auth login ${p.id} and set auth.command (auth is "none")` : `ask the ${p.id} admin for access, or store another key with bun run auth login ${p.id}`,
+    403: p.auth === 'none' ? `ask the ${p.id} admin for access. If it wants a key, run klyth auth login api-key ${p.id} and set auth.command (auth is "none")` : `ask the ${p.id} admin for access, or store another key with klyth auth login api-key ${p.id}`,
     404: `check providers.${p.id}.baseUrl and the model id ${model}`,
   }
   const fix = status >= 500 ? `the provider failed${after}: retry, or pick another model` : (fixes[status] ?? `check the params of ${model} in klyth.json`)

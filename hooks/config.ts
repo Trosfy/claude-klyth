@@ -185,7 +185,7 @@ function bool(v: unknown, fallback: boolean, path: string, errors: string[]): bo
 // searches PATH), shown verbatim when the provider is approved; or "none". The approval, not this check, is
 // what stands between an edited config and a helper run.
 function auth(id: string, v: Json, path: string, errors: string[]): Auth {
-  const login = `bun run auth login ${id}, which stores the key in the keychain and writes "auth": { "command": [...] }`
+  const login = `klyth auth login api-key ${id}, which stores the key in the keychain and writes "auth": { "command": [...] }`
   const a = v['auth']
   if (v['apiKeyEnv'] !== undefined) errors.push(`${path}.apiKeyEnv: no longer read; keys come from a credential helper. Run ${login} in its place`)
   else if (a === undefined) errors.push(`${path}.auth: missing; run ${login}, or set "auth": "none" for a server that checks no key`)

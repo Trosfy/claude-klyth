@@ -6,7 +6,7 @@
 // ends the step with no further request; status runs nothing; and klythd exits, removing its directory, on SIGTERM and
 // when its parent goes away.
 import { afterAll, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -16,7 +16,7 @@ import type { StepEvent } from '../hooks/protocol'
 
 const MAIN = join(import.meta.dir, 'main.ts')
 const KEY = 'sk-klyth-e2e-0123456789abcdef'
-const UA = 'klyth/0.2.0'
+const UA = `klyth/${JSON.parse(readFileSync(join(import.meta.dir, '../.claude-plugin/plugin.json'), 'utf8')).version}` // what main.ts reads
 const seen: { path: string; ua: string | null; auth: string | null }[] = []
 let cancelled = 0
 let flaky = 0

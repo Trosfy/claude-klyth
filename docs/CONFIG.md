@@ -50,15 +50,18 @@ login that rewrites a provider removes a stale `User-Agent` header from `headers
 headers.
 
 A key that belongs to another kind is an error (`providers.<id>.<key>: unknown key`). `apiKeyEnv` is an error that names
-`bun run auth login <id>`.
+`klyth auth login api-key <id>`.
 
 **`baseUrl`.** The URL must use `https`, unless the provider sets `allowHttp: true`. It must not have credentials, a
 query, a fragment, a backslash, whitespace, or any of `[ ] { }` (URL templates and IPv6 literals are not supported). The
 host is a DNS name with at least two labels, or an IPv4 address. `127.0.0.1` is valid. Klyth refuses `localhost`. A port
 is valid. Klyth drops trailing slashes and refuses inference redirects. Use HTTPS, or an encrypted tunnel to loopback,
 because a private LAN does not encrypt an HTTP hop. Provider approval binds to the kind, the URL origin (scheme, host
-and port), and the exact helper argv or keyless mode. It does not bind to the path, model or params. Klyth requests
-`<baseUrl>` plus the path of the kind:
+and port), and the exact command argv or keyless mode. It does not bind to the path, model or params. With the installed
+launcher, the argv stays the same across updates. An approval does not bind to the launcher's contents, the Klyth release,
+Bun or a script hash. A Klyth update changes the code that runs under an approved launcher command. To require approval
+for each release, set `auth.command` to that release's own `scripts/cli.ts` path. The line 2 marker shows ownership. It
+is not an authenticity check. Klyth requests `<baseUrl>` plus the path of the kind:
 
 | Kind | Path added |
 | --- | --- |
@@ -78,8 +81,8 @@ environment-variable form, and `auth.env` is an error.
 - `ttlSeconds` is a positive integer, default `300`. It sets how long klythd keeps the key in memory. On an ordinary
   request, a 401 or 403 drops the cached key. If the rejected key came from the cache, Klyth runs the helper once more
   and retries before any output. Compaction and guarded dispatch requests make one attempt.
-- Examples: [Keychain, `secret-tool`, `pass`, `op read`](PROVIDERS.md#keys). A ChatGPT sign-in uses the command
-  `bun scripts/auth.ts token <provider>` with `"ttlSeconds": 600`. See
+- Examples: [Keychain, `secret-tool`, `pass`, `op read`](PROVIDERS.md#keys). A ChatGPT sign-in uses
+  `klyth auth token <provider>` with `"ttlSeconds": 600`. See
   [OpenAI with your ChatGPT plan](PROVIDERS.md#openai-with-your-chatgpt-plan).
 - `"auth": "none"` is for a server that checks no key (a local Ollama or vLLM). Klyth runs no command and sends no
   `Authorization` or `x-api-key` header. You still approve the provider once, and a change between a command and
@@ -97,9 +100,9 @@ Klyth sends one id per loop. Main keeps its id through `/clear`, `/compact`, mod
 and resumes, and each subagent keeps its own id. The ids are cache identities, not permission grants. The fork context
 of the [classifier](#classifier) sends the id of its loop, and the fresh context sends none.
 
-**Timeouts.** Without `timeoutMs`, Klyth cuts a request when no data arrives for 600 s (the stall window) or after
-1,800 s in all. With `timeoutMs`, the whole-request limit is that many milliseconds, and the stall window is the smaller
-of 600 s and `timeoutMs`. Connecting has a 15 s limit.
+**Timeouts.** Without `timeoutMs`, Klyth has no limit on the total request time. Klyth cuts a request when no data
+arrives for 600 s (the stall window). With `timeoutMs`, the whole-request limit is that many milliseconds. The stall
+window is the smaller of 600 s and `timeoutMs`. Connecting has a 15 s limit.
 
 ## Models
 
@@ -159,18 +162,32 @@ The `tiers` array is optional. This example uses illustrative rates, not provide
   the whole request. If the total input is unknown, a nonempty schedule selects no table, and the cost stays incomplete.
 - Each request keeps the rates it started with. The estimates are not a bill or an incremental subscription charge.
 
-`/klyth usage` opens a native pane after the current main turn ends, and `/klyth usage text` prints the same local
-totals. If the pane cannot open, Klyth prints the text. The filters All, Main, Children and Maintenance change only the
-model breakdown. The report counts routed main and local child steps, classifier requests and each compaction summary
-request. It leads with the estimated session cost and a completeness qualifier, and it flags missing rates, missing
-token categories and unknown attempts. Reasoning usage is part of output and is not priced twice. Token counts are not
-an invoice, and the estimate leaves out fees that the protocol does not expose. Totals cover this engine session and its
-local children, and `/clear` starts a new total. Viewing usage sends no inference request.
+`/klyth usage` opens a native pane after the current main turn ends. `/klyth usage text` prints the same local
+totals. If the pane cannot open, Klyth prints the text. The pane starts with session controls and their shortcuts.
+The filters All, Main conversation, Subagents, and Checks and summaries change only the model rows.
+The session total stays the same. Klyth counts routed conversation requests, subagent requests, auto mode checks, and
+conversation summaries. A request is one routed unit of work. A run is one Klyth execution. A provider call is one
+attempt, including a retry.
 
-Klyth saves a checkpoint under the plugin store key `usage:v1`, best effort. The host shares a 4 MiB plugin store limit
-across all plugin records. If the host rejects a checkpoint, accounting continues and the pane shows `Not saved`.
-Retained usage holds counters, dispatch metadata for pending work, and the transcript path. It never holds transcript
-content or credentials. Klyth retires the record of an inactive session when its transcript is gone.
+The report starts with `Estimated cost:` and a warning if totals may be incomplete. Model rows follow.
+`Session details` comes after the model rows. It shows which requests have usage data. Numbers use full digits with
+thousands separators. `Input tokens from cache` shows the share of eligible input tokens that came from cache.
+Klyth calculates this share from token totals, not the mean of the provider-call percentages.
+Reasoning tokens form part of output, so Klyth does not count their cost twice.
+The estimate is not a bill or an extra subscription charge. It excludes fees that the protocol does not expose.
+Totals cover this session and its subagents. `/clear` starts a new total. Viewing usage sends no inference request.
+
+Empty sessions show `No requests yet.` Requests in progress show `Work in progress.` Missing prices show
+`Some usage has no cost estimate. Add model prices under pricing in klyth.json.` Missing counts show
+`Some token counts are missing. Run another request to check usage data.` A partial estimate starts with `At least $`.
+Klyth never shows unknown cost as zero. Open a model row to see its full name and token counts.
+
+Klyth tries to save usage under the plugin store key `usage:v1`. The host shares a 4 MiB limit across all plugin records.
+If a save fails, the pane shows `Klyth could not save usage. Totals may be incomplete.`
+If Klyth can no longer update the record, it shows `Klyth cannot update this usage record. Totals may be incomplete.`
+Both states say `Print this report to keep the current totals.` Use Print report or `/klyth usage text`.
+Saved usage holds counters, details of pending requests, and the transcript path. It never holds transcript
+content or credentials. Klyth removes an inactive session's record when its transcript is gone.
 
 ## Compaction
 

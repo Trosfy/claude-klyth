@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { createUsageEnvelope, reduceUsage, type UsageEnvelope } from '../hooks/usage-ledger'
 import { finalEvidence, partitionedUsage } from '../hooks/usage-evidence'
-import { usageCompactNumber, usageCompactTokens, usageText, usageView } from '../hooks/usage-view'
+import { usageNumber, usageCompactTokens, usageText, usageView } from '../hooks/usage-view'
 import { changeUsagePane, openUsagePane, renderUsagePane, usagePanePreferences } from '../hooks/usage-pane'
 import { klyth, SESSION_ID, start, step, world } from './world'
 
@@ -29,22 +29,22 @@ test('empty pane is compact, explains observation start, and reveals diagnostics
   }, SESSION_ID, state.sessions[0], preferences, e.props.bodyColumns, 617564))
   const ui = await mount($, 40)
   const initial = (await ui.findAll({ type: 'Text' })).map(item => item.text)
-  expect(initial.length).toBeLessThanOrEqual(14)
-  expect(initial[1]).toBe('Estimated cost: Not priced yet')
-  expect(initial).toContain('No routed requests recorded yet.')
-  expect(initial).toContain('Tracking starts when Klyth is loaded.')
-  expect(initial).toContain('Esc to close')
-  expect(initial.join('\n')).not.toContain('Execution outcomes:')
-  expect(initial.join('\n')).not.toContain('Usage coverage:')
+  expect(initial.length).toBeLessThanOrEqual(18)
+  expect(initial.find(line => line?.startsWith('Estimated cost:'))).toBe('Estimated cost: No requests yet. Run a request through Klyth to see usage.')
+  expect(initial).toContain('Klyth has not sent a request in this session.')
+  expect(initial).toContain('Run a request through Klyth to see usage.')
+  expect(initial).toContain('Press Escape to close.')
+  expect(initial.join('\n')).not.toContain('Runs:')
+  expect(initial.join('\n')).not.toContain('Provider calls with input and output counts:')
   expect(initial.join('\n')).not.toContain('617,564')
   expect(await ui.find({ key: 'filter-All' })).toBeUndefined()
   expect(await ui.find({ key: 'next' })).toBeUndefined()
   await ui.press({ key: 'diagnostics' })
   await ui.redraw()
   const details = (await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')
-  expect(details).toContain('Execution outcomes:')
-  expect(details).toContain('Current context (host estimate): 617,564 tokens')
-  expect(details).toContain('Observed since:')
+  expect(details).toContain('Runs:')
+  expect(details).toContain('Current conversation size: About 617,564 tokens')
+  expect(details).toContain('Usage count start:')
   await ui.press({ key: 'diagnostics' })
   await ui.redraw()
   expect((await ui.findAll({ type: 'Text' })).map(item => item.text)).toEqual(initial)
@@ -54,11 +54,11 @@ test('empty pane is compact, explains observation start, and reveals diagnostics
 })
 
 test('compact token labels keep missing and provisional usage visible', () => {
-  expect(usageCompactNumber(1234000)).toBe('1.2M')
-  expect(usageCompactTokens({ count: 0, unknown: 1, partial: 0 })).toBe('Unknown')
-  expect(usageCompactTokens({ count: 12500, unknown: 1, partial: 0 })).toBe('12.5K + ?')
-  expect(usageCompactTokens({ count: 0, unknown: 0, partial: 20 })).toBe('0 + provisional')
-  expect(usageCompactTokens({ count: 0, unknown: 1, partial: 20 })).toBe('Unknown + provisional')
+  expect(usageNumber(1234000)).toBe('1,234,000')
+  expect(usageCompactTokens({ count: 0, unknown: 1, partial: 0 })).toBe('No token count')
+  expect(usageCompactTokens({ count: 12500, unknown: 1, partial: 0 })).toBe('12,500 tokens. Some counts are missing.')
+  expect(usageCompactTokens({ count: 0, unknown: 0, partial: 20 })).toBe('0 final tokens. Other calls reported at least 20 tokens. Their final counts are not available.')
+  expect(usageCompactTokens({ count: 0, unknown: 1, partial: 20 })).toBe('No final token count. Other calls reported at least 20 tokens. Their final counts are not available. Some counts are missing.')
 })
 
 for (const width of [24, 40, 75, 76, 110]) test(`native pane mounts at ${width} body columns with total-first partial cost and local controls`, { timeoutMs: 30000 }, async ($, on) => {
@@ -76,21 +76,21 @@ for (const width of [24, 40, 75, 76, 110]) test(`native pane mounts at ${width} 
   const runs = w.runs.length
   const requests = w.requests.length
   const ui = await mount($, width)
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Estimated cost: $0.00004 known + unpriced usage')
-  expect((await ui.findAll({ type: 'Text' }))[1]?.text).toBe('Estimated cost: $0.00004 known + unpriced usage')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Estimated cost: At least $0.00004. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
+  expect((await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text).toBe('Estimated cost: At least $0.00004. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
   expect(w.stateSets).toHaveLength(sets)
   expect(await ui.find({ key: 'filter-All' })).toBeDefined()
   const boxes = await ui.findAll({ type: 'Box' })
   expect(boxes.some(item => item.props?.['flexDirection'] === 'row' && item.props?.['flexWrap'] === 'wrap')).toBe(true)
   await ui.press({ key: 'filter-Children' })
   await ui.redraw()
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('No models in this filter.')
-  expect((await ui.findAll({ type: 'Text' }))[1]?.text).toBe('Estimated cost: $0.00004 known + unpriced usage')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('This group has no models. Select All to see all models.')
+  expect((await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text).toBe('Estimated cost: At least $0.00004. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
   await ui.press({ key: 'filter-All' })
   await ui.redraw()
   await ui.press({ key: 'model-acme/model' })
   await ui.redraw()
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('reasoning (output subset):')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Reasoning tokens within output:')
   await ui.press({ key: 'text' })
   expect(w.transcript).toEqual(usageText(state.sessions[0]!))
   expect(w.requests).toHaveLength(requests)
@@ -120,7 +120,7 @@ test('pane command opens only on request, requests focus, falls back on unplaced
   expect(w.transcript).toEqual([])
   placed = false
   expect(await klyth($, 'usage')).toEqual({})
-  expect(w.transcript.join('\n')).toContain('Estimated cost: unavailable (no routed requests observed)')
+  expect(w.transcript.join('\n')).toContain('Estimated cost: No requests yet. Run a request through Klyth to see usage.')
   fail = true
   expect(await klyth($, 'usage')).toEqual({})
   const before = opens
@@ -130,7 +130,7 @@ test('pane command opens only on request, requests focus, falls back on unplaced
 })
 
 test('opening exceptions produce the exact local fallback report', async () => {
-  const lines = ['Estimated cost: $0 known + unpriced usage']
+  const lines = ['Estimated cost: At least $0. Some usage has no cost estimate. Add model prices under pricing in klyth.json.']
   expect(await openUsagePane(async () => { throw new Error('not placed') }, async () => lines)).toEqual(lines)
   expect(await openUsagePane(async () => ({ isPlaced: false }), async () => lines)).toEqual(lines)
   expect(await openUsagePane(async () => ({ isPlaced: true }), async () => { throw new Error('fallback should not run') })).toEqual([])
@@ -171,7 +171,7 @@ test('large Unicode model identities remain reachable in bounded 20-row pages an
   const model = (await ui.findAll({ type: 'Button' })).find(item => item.key?.startsWith('model-'))!
   await ui.press({ key: model.key! })
   await ui.redraw()
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('')).toContain('model identity 1/')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('')).toContain('Full model name, part 1 of ')
   expect(await ui.find({ key: 'detail-next' })).toBeDefined()
   await ui.press({ key: 'detail-next' })
   await ui.redraw()
@@ -194,7 +194,7 @@ test('filters scope only model breakdown and preferences reset on engine-session
   expect(usageView(session, 'Main').models.map(row => row.target)).toEqual(['acme/model'])
   expect(usageView(session, 'Children').models.map(row => row.target)).toEqual(['acme/child'])
   expect(usageView(session, 'Maintenance').models.map(row => row.target)).toEqual(['acme/classifier', 'acme/compact'])
-  for (const filter of ['All', 'Main', 'Children', 'Maintenance'] as const) expect(usageView(session, filter).estimatedCost).toBe('$0.00004 known + unpriced usage')
+  for (const filter of ['All', 'Main', 'Children', 'Maintenance'] as const) expect(usageView(session, filter).estimatedCost).toBe('At least $0.00004. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
   const saved = changeUsagePane(SESSION_ID, undefined, { type: 'expand', target: 'acme/model' })
   expect(saved.expanded).toBe('acme/model')
   expect(changeUsagePane(SESSION_ID, saved, { type: 'expand', target: 'acme/model' }).expanded).toBeUndefined()
@@ -209,24 +209,24 @@ test('real registration mounts cumulative state, redraws after a step and keeps 
   on('ui.close', () => ({ value: undefined }))
   await start($)
   const ui = await $.ui.mount({ plugin: 'klyth', surface: 'terminal', component: 'Pane', requestId: 'klyth-usage', props: paneProps(40) })
-  expect((await ui.findAll({ type: 'Text' }))[1]?.text).toBe('Estimated cost: Not priced yet')
+  expect((await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text).toBe('Estimated cost: No requests yet. Run a request through Klyth to see usage.')
   await $.command.run({ command: 'model', args: 'fast', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
   await step($, { turnId: 'pane-turn', index: 0 })
   await ui.press({ key: 'diagnostics' })
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Logical requests: 1 (1 tracked, 0 untracked)')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Requests with records: 1')
   const runs = w.runs.length
   const requests = w.requests.length
   const writes = w.stateSets.length
   await ui.redraw({ ...paneProps(110), view: { agentId: 'unrelated-child' } })
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Logical requests: 1 (1 tracked, 0 untracked)')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Requests with records: 1')
   expect(w.stateSets).toHaveLength(writes)
   await ui.press({ key: 'filter-Children' })
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('No models in this filter.')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('This group has no models. Select All to see all models.')
   await ui.press({ key: 'filter-All' })
   await ui.press({ key: 'model-acme/model-a' })
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('reasoning (output subset)')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Reasoning tokens within output')
   await ui.press({ key: 'text' })
-  const paneCost = (await ui.findAll({ type: 'Text' }))[1]?.text
+  const paneCost = (await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text
   expect(w.transcript).toContain(paneCost)
   expect(w.transcript.every(line => Array.from(line).length < 2000)).toBe(true)
   await ui.press({ key: 'close' })
@@ -262,7 +262,7 @@ test('overlapping filter actions retry a conflicting preference write and retain
   await Promise.all([ui.press({ key: 'filter-Main' }), ui.press({ key: 'filter-Children' })])
   enabled = false
   await ui.redraw()
-  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Models · Children')
+  expect((await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')).toContain('Models: Subagents')
   expect(commits).toEqual([
     expect.objectContaining({ value: expect.objectContaining({ isSet: true }) }),
     expect.objectContaining({ value: expect.objectContaining({ isSet: false }) }),
@@ -306,25 +306,25 @@ test('warning, empty, zero and tiny-cost states use the same literal qualificati
   session.warnings.earlierUnavailable = true
   await ui.redraw()
   const warnings = (await ui.findAll({ type: 'Text' })).map(item => item.text).join('\n')
-  expect(warnings).toContain('Not saved; live totals are still tracked.')
-  expect(warnings).toContain('Earlier usage may be missing. See Details.')
+  expect(warnings).toContain('Klyth could not save usage. Totals may be incomplete.')
+  expect(warnings).toContain('Klyth could not save usage. Totals may be incomplete.')
   for (const [cost, incomplete, known, label] of [
-    [0, 1, true, '$0 known + unpriced usage'],
-    [0, 0, true, 'Approx. $0'],
-    [1e-13, 0, true, 'Approx. <$0.000000000001'],
-    [0, 1, false, 'Unidentified cost'],
+    [0, 1, true, 'At least $0. Some usage has no cost estimate. Add model prices under pricing in klyth.json.'],
+    [0, 0, true, '$0'],
+    [1e-13, 0, true, 'Less than $0.000000000001'],
+    [0, 1, false, 'Not available. Some usage has no cost estimate. Add model prices under pricing in klyth.json.'],
   ] as const) {
     session.costUsd = cost
     session.costIncompleteAttempts = incomplete
     session.hasKnownCost = known
     await ui.redraw()
-    expect((await ui.findAll({ type: 'Text' }))[1]?.text).toBe(`Estimated cost: ${label}`)
+    expect((await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text).toBe(`Estimated cost: ${label}`)
     expect(usageText(session)[1]).toBe(`Estimated cost: ${label}`)
   }
   current = undefined
   await ui.redraw()
   expect(await ui.find({ key: 'text' })).toBeDefined()
-  expect((await ui.findAll({ type: 'Text' }))[1]?.text).toBe('Estimated cost: unavailable')
+  expect((await ui.findAll({ type: 'Text' })).find(item => item.text?.startsWith('Estimated cost:'))?.text).toBe('Estimated cost: Not available')
   expect(w.requests).toEqual([])
   expect(w.runs).toEqual([])
   await ui.unmount()

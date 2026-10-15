@@ -160,7 +160,7 @@ test('a refused exchange, a refused store and an item that does not read back ea
   expect(locked.h.err).toEqual(['klyth auth: the macOS Keychain refused the sign-in (exit 51); unlock it, then retry'])
   const differs = world({ readBack: 'v1|something|else|1||x' })
   expect(await signIn(differs)).toBe(1)
-  expect(differs.h.err).toEqual(['klyth auth: stored, but reading chatgpt back did not give the same sign-in (exit 0); run logout chatgpt, then login again'])
+  expect(differs.h.err).toEqual(['klyth auth: Stored, but reading chatgpt back did not give the same sign-in (exit 0). Run klyth auth logout chatgpt. Then run klyth auth login chatgpt --provider chatgpt.'])
   for (const w of [refused, locked, differs]) for (const t of TOKENS) expect(w.shown()).not.toContain(t)
 })
 
@@ -192,7 +192,7 @@ test('--write-config writes the bun and scripts/auth.ts paths with token <provid
   expect(JSON.parse(readFileSync(kept.configPath, 'utf8')).providers.chatgpt.auth).toEqual({ command, ttlSeconds: 120 })
   const printed = world()
   expect(await signIn(printed)).toBe(0)
-  expect(printed.h.out.at(-1)).toBe(`set, under providers.chatgpt in ${printed.configPath} (or rerun with --write-config):\n  "auth": { "command": ${JSON.stringify(command)}, "ttlSeconds": 600 }`)
+  expect(printed.h.out.at(-1)).toBe(`set, under providers.chatgpt in ${printed.configPath} (See klyth auth --help. Use --write to update config.):\n  "auth": { "command": ${JSON.stringify(command)}, "ttlSeconds": 600 }`)
   const missing = world()
   expect(await missing.cli('login', 'chatgpt', '--chatgpt', '--write-config')).toBe(1)
   expect(missing.h.ports).toEqual([])
@@ -243,7 +243,7 @@ test('a write that fails after a successful refresh still prints the new token, 
   const w = world({ items: { chatgpt: item({ expiresAt: S + 60 }) }, refuseWrite: true })
   expect(await w.cli('token', 'chatgpt')).toBe(0)
   expect(w.h.out).toEqual([NEW_ACCESS])
-  expect(w.h.err).toEqual(['klyth auth: refreshed, but storing the new sign-in failed; the next refresh will need bun run auth login chatgpt --chatgpt'])
+  expect(w.h.err).toEqual(['klyth auth: The refresh succeeded. Klyth could not store the sign-in. Before the next refresh, run klyth auth login chatgpt --provider chatgpt'])
 })
 
 test('an item too long for one security -i line is never written: login stores nothing, and a refresh keeps the stored item and exits 1 printing no token', async () => {
@@ -380,17 +380,17 @@ test('a refresh with no answer within 5 s ends with one line', async () => {
 test('token with no item, or an item that is a plain key, exits 1 with one line', async () => {
   const none = world()
   expect(await none.cli('token', 'chatgpt')).toBe(1)
-  expect(none.h.err).toEqual(['klyth auth: no ChatGPT sign-in readable for chatgpt in the macOS Keychain (locked, or none stored); run bun run auth login chatgpt --chatgpt'])
+  expect(none.h.err).toEqual(['klyth auth: no ChatGPT sign-in readable for chatgpt in the macOS Keychain (locked, or none stored). Run klyth auth login chatgpt --provider chatgpt'])
   const key = world({ items: { chatgpt: 'sk-placeholder-key' } })
   expect(await key.cli('token', 'chatgpt')).toBe(1)
-  expect(key.h.err).toEqual(["klyth auth: chatgpt's item in the macOS Keychain is not a ChatGPT sign-in; run bun run auth login chatgpt --chatgpt"])
+  expect(key.h.err).toEqual(["klyth auth: chatgpt's item in the macOS Keychain is not a ChatGPT sign-in. Run klyth auth login chatgpt --provider chatgpt"])
   expect(key.shown()).not.toContain('sk-placeholder-key')
 })
 
 test('export refuses a terminal; down a pipe it writes the item, then removes the local one; a broken pipe keeps it', async () => {
   const tty = world({ items: { chatgpt: item() }, tty: true })
   expect(await tty.cli('export', 'chatgpt')).toBe(2)
-  expect(tty.h.err).toEqual(["klyth auth: export prints your ChatGPT refresh token; pipe it: bun run auth export chatgpt | ssh <host> 'cd <klyth-checkout> && bun run auth login chatgpt'"])
+  expect(tty.h.err).toEqual([`klyth auth: Export prints your ChatGPT refresh token. First run ssh <host> '"$HOME/.local/bin/klyth" --version'. Then pipe it: klyth auth export chatgpt | ssh <host> '"$HOME/.local/bin/klyth" auth import chatgpt'`])
   expect([tty.h.piped, tty.h.items]).toEqual([[], { 'klyth:chatgpt': item() }])
   const w = world({ items: { chatgpt: item() } })
   expect(await w.cli('export', 'chatgpt')).toBe(0)

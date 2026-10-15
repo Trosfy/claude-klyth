@@ -30,10 +30,15 @@ export async function cli(args: readonly string[], io: Io & Ports): Promise<numb
   const [write, chatgpt, device, browser] = [flags.includes('--write-config'), flags.includes('--chatgpt'), flags.some(flag => io.extraSignIn?.cliFlags.includes(flag)), !flags.includes('--no-browser')]
   const port = at < 0 ? 1455 : /^\d{1,5}$/.test(args[at + 1] ?? '') ? Number(args[at + 1]) : 0
   // Nothing typed is echoed: an argument given by mistake could be a key.
-  const usage = (why: string) => (io.err(`klyth auth: ${why}\nusage: bun run auth login|logout <provider> [--write-config] | login <provider> --chatgpt [--write-config] [--port <n>] [--no-browser]${io.extraSignIn === undefined ? '' : ' | login <provider> --chatgpt ' + io.extraSignIn.cliFlags.join(' ') + ' [--write-config]'} | token|export <provider> | list [provider]  (run it in the Klyth checkout; the key comes from stdin, never argv)\nMigration: ${MIGRATE_USAGE}`), 2)
+  const usage = (why: string) => (io.err(`klyth auth: ${why}. This is the legacy form. Use klyth auth --help.
+Migration: ${MIGRATE_USAGE}`), 2)
+  if (cmd === 'login' && (p === 'api-key' && extra.length > 0 || flags.includes('--provider'))) {
+    const method = p === 'api-key' ? 'api-key <provider>' : 'chatgpt --provider <provider>'
+    return usage(`Use klyth auth login ${method}`)
+  }
   if (extra.length > 0 || flags.some(f => f !== '--write-config' && f !== '--chatgpt' && !io.extraSignIn?.cliFlags.includes(f) && f !== '--no-browser')) return usage('unexpected arguments')
-  if (cmd !== 'login' && cmd !== 'logout' && cmd !== 'list' && cmd !== 'token' && cmd !== 'export') return usage('expected login, logout, list, token or export')
-  if ((write || chatgpt) && cmd !== 'login') return usage('--write-config and --chatgpt belong to login')
+  if (cmd !== 'login' && cmd !== 'logout' && cmd !== 'list' && cmd !== 'token' && cmd !== 'export' && cmd !== 'import') return usage('expected login, logout, list, token or export')
+  if ((write || chatgpt) && cmd !== 'login' && cmd !== 'import') return usage('--write-config and --chatgpt belong to login')
   if ((at >= 0 || !browser) && !chatgpt) return usage('--port and --no-browser belong to login --chatgpt')
   if (device && io.extraSignIn === undefined) return usage('device sign-in is unavailable')
   if (device && (!chatgpt || at >= 0 || !browser)) return usage('--device belongs to login --chatgpt, without --port or --no-browser')
@@ -58,7 +63,7 @@ export async function cli(args: readonly string[], io: Io & Ports): Promise<numb
   try { config = readAuthConfig(io.configPath) } catch (e) { if (cmd === 'logout') config = {}; else return io.err(`klyth auth: ${(e as Error).message}`), 1 }
   if (cmd === 'list') {
     const names = p === undefined ? Object.keys(providersOf(config)) : [p]
-    if (names.length === 0) return io.err(`klyth auth: no providers in ${io.configPath}; name one: list <provider>`), 1
+    if (names.length === 0) return io.err(`klyth auth: no providers in ${io.configPath}. Use klyth auth status <provider>.`), 1
     let failed = false
     for (const n of names) {
       const held = await credentialPresence(io.run, store, n)
@@ -92,7 +97,7 @@ export async function cli(args: readonly string[], io: Io & Ports): Promise<numb
   // The auth line (and the provider headers a device sign-in needs; one given as undefined is removed) for
   // klyth.json, printed, or written under --write-config.
   const finish = (command: readonly string[], ttl?: number, headers?: Record<string, string | undefined>) => {
-    if (!write) return io.out(`set, under providers.${id} in ${io.configPath} (or rerun with --write-config):\n${line(command, ttl)}${headers === undefined ? '' : `,\n  "headers": ${JSON.stringify(headers)}`}`), 0
+    if (!write) return io.out(`set, under providers.${id} in ${io.configPath} (See klyth auth --help. Use --write to update config.):\n${line(command, ttl)}${headers === undefined ? '' : `,\n  "headers": ${JSON.stringify(headers)}`}`), 0
     try {
       return io.out(`wrote providers.${id}.auth.command${headers === undefined ? '' : ' and headers'} to ${commitAuthConfig(io, io.configPath, config, id, command, ttl, headers)}`), 0
     } catch (e) { return io.err(`klyth auth: sign-in/key saved; configuration not changed: ${(e as Error).message}`), 1 }
@@ -106,6 +111,7 @@ export async function cli(args: readonly string[], io: Io & Ports): Promise<numb
   if (held.status === 'error') return io.err(`klyth auth: lookup failed in the ${store.name}; nothing stored`), 1
   let key: string
   try { key = (await io.readKey()).trim() } catch { return io.err('klyth auth: could not read a hidden key; nothing stored'), 1 }
+  if (cmd === 'import' && !isSignIn(key)) return io.err('klyth auth: Invalid sign-in record. Nothing stored.'), 1
   if (isSignIn(key)) {
     const failed = await importItem(signIn, id, key, held)
     if (failed !== undefined) return io.err(`klyth auth: ${failed}`), 1
@@ -116,12 +122,12 @@ export async function cli(args: readonly string[], io: Io & Ports): Promise<numb
   if (!isUsableKey(key)) return io.err('klyth auth: the key must be 1 to 4096 visible ASCII characters with no spaces; nothing stored'), 1
   const add = store.add(id, key)
   if (typeof add === 'string') return io.err(`klyth auth: ${add}`), 1
-  if (held.status === 'found' && reservedRecord(held.value)) return io.err(`klyth auth: ${id} holds a ChatGPT sign-in; run logout first, or login --chatgpt`), 1
+  if (held.status === 'found' && reservedRecord(held.value)) return io.err(`klyth auth: ${id} holds a ChatGPT sign-in. Run klyth auth logout ${id} first, or klyth auth login chatgpt --provider ${id}`), 1
   const failed = await mutateCredential(signIn, id, held, async () => {
     const added = await io.run(add.argv, add.input)
     if (added.exitCode !== 0) return `the ${store.name} refused the key (exit ${added.exitCode}); unlock it, then retry`
     const back = await io.run(store.read(id))
-    return back.exitCode === 0 && back.stdout.trim() === key ? undefined : `stored, but reading ${id} back did not give the same key (exit ${back.exitCode}); run logout ${id}, then login again`
+    return back.exitCode === 0 && back.stdout.trim() === key ? undefined : `stored, but reading ${id} back did not give the same key (exit ${back.exitCode}). Run klyth auth logout ${id}. Then run klyth auth login api-key ${id}.`
   })
   if (failed !== undefined) return io.err(`klyth auth: ${failed}`), 1
   io.out(`${id}: key stored in the ${store.name} (service klyth, account ${id}) and read back intact`)

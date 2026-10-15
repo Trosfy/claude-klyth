@@ -20,8 +20,8 @@ import type { Cut } from './errors'
 import { normalize, remoteIds } from './history'
 import type { Placed } from './history'
 import { capture, invalidSessionScope, lookup, memoryStore, unavailable, type ResponseStore } from './responses'
-// A provider request as the transport sends it: the stall window and the whole-request bound in seconds.
-export type UpstreamRequest = { url: string; allowHttp: boolean; headers: Record<string, string>; body: string; stallS: number; totalS: number }
+// A provider request as the transport sends it: the stall window and an optional finite whole-request bound in seconds.
+export type UpstreamRequest = { url: string; allowHttp: boolean; headers: Record<string, string>; body: string; stallS: number; totalS?: number }
 // The provider's answer: its status and `retry-after` header (as sent), its body's bytes as they come (ending with how
 // the body was cut, undefined when it ended), and `cancel`, which ends the request whether or not the body was read; or
 // how the request was cut before any answer.
@@ -38,7 +38,6 @@ export type Env = {
   responses?: (scope: SessionScope) => ResponseStore // the file store of a step's session; absent, steps use one memory store
   trace?: true // logs the first input item that differs from the loop's last step (a digest per item per step): KLYTH_PREFIX_TRACE=1
 }
-const DEFAULT_TOTAL_S = 1800
 // A finish reason as the short lowercase token the debug line, the stats and /klyth may show; any other text reads as `other`.
 const finishToken = (reason: string) => reason.toLowerCase().match(/^[a-z0-9_.-]{1,64}$/)?.[0] ?? 'other'
 type DaemonEvent = StepEvent | UsageExecutionSummary
@@ -191,8 +190,8 @@ export function createStepper(env: Env) {
     const bound = Math.min(p.timeoutMs ?? Infinity, req.timeoutMs ?? Infinity) // the request's bound, or the provider's when smaller
     const byRequest = (req.timeoutMs ?? Infinity) < (p.timeoutMs ?? Infinity) // the request's bound is the tighter
     const stallS = Math.max(1, Math.floor(Math.min(600, bound / 1000)))
-    const totalS = bound === Infinity ? DEFAULT_TOTAL_S : Math.ceil(bound / 1000)
-    const left = () => totalS * 1000 - (performance.now() - started) // ms of the step's bound not yet spent
+    const totalS = bound === Infinity ? undefined : Math.ceil(bound / 1000)
+    const left = () => totalS === undefined ? Infinity : totalS * 1000 - (performance.now() - started) // ms of the step's bound not yet spent
     const { messages, input, system, instructions, tools, toolConfig, ...params } = JSON.parse(enc.body) as Record<string, unknown>
     const encoded = (input ?? messages ?? []) as unknown[]
     // Traced, a step that does not extend the last step of its loop and route names the first input item that differs.
@@ -219,7 +218,7 @@ export function createStepper(env: Env) {
     const prefix = ` system=${await safeHash(oa ? encoded.slice(0, 1) : system ?? instructions)} tools=${await safeHash(tools ?? toolConfig)} params=${await safeHash({ ...params, prompt_cache_key: undefined })} historyTotal=${history.length} historyOmitted=${history.length - indices.length} history=${sampled.join(',') || '-'} firstMeta=${await safeHash(firstMeta)} firstBlocksTotal=${firstBlocks.length} firstBlocksOmitted=${firstBlocks.length - firstSample.length} firstBlocks=${firstSample.join(',') || '-'}`
     diagnostic = ` load=${load} session=${p.sessionHeader === undefined || headers[p.sessionHeader.toLowerCase()] === undefined ? '-' : await safeHash(headers[p.sessionHeader.toLowerCase()])}${prefix}`
     // A timeout names the step's whole bound, not the part of it a resend was given.
-    const bounded = (c: Cut): Cut => (c.kind === 'total' ? { ...c, detail: String(totalS) } : c)
+    const bounded = (c: Cut): Cut => (c.kind === 'total' && totalS !== undefined ? { ...c, detail: String(totalS) } : c)
     let tries = 0
     let refreshed = false
     const retry = async (a: Parameters<typeof retryWait>[0], text: string, reason: string) => {
@@ -240,7 +239,7 @@ export function createStepper(env: Env) {
       tries++
       const attempt: UsageAttemptSummary = { sequence: tries, outcome: 'unknown' }
       attempts.push(attempt)
-      const answer = await env.post({ url: `${p.baseUrl}${enc.path}`, allowHttp: p.allowHttp, headers: sentHeaders, body: enc.body, stallS, totalS: Math.ceil(left() / 1000) }, signal)
+      const answer = await env.post({ url: `${p.baseUrl}${enc.path}`, allowHttp: p.allowHttp, headers: sentHeaders, body: enc.body, stallS, ...(totalS === undefined ? {} : { totalS: Math.ceil(left() / 1000) }) }, signal)
       if (signal.aborted) {
         attempt.outcome = 'aborted'
         if ('status' in answer) answer.cancel()

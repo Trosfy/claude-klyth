@@ -242,7 +242,7 @@ test('a v1| sign-in on stdin is stored unchanged and read back, and its auth lin
   expect(w.h.items).toEqual({ 'klyth:acme': SIGN_IN })
   expect(w.h.out).toEqual([
     'acme: ChatGPT sign-in stored in the macOS Keychain (service klyth, account acme) and read back intact',
-    `set, under providers.acme in ${w.configPath} (or rerun with --write-config):\n  "auth": { "command": ${JSON.stringify(TOKEN_COMMAND)}, "ttlSeconds": 600 }`,
+    `set, under providers.acme in ${w.configPath} (See klyth auth --help. Use --write to update config.):\n  "auth": { "command": ${JSON.stringify(TOKEN_COMMAND)}, "ttlSeconds": 600 }`,
   ])
   expect(w.said()).not.toContain(JSON.stringify(READ))
   for (const secret of ['rt-placeholder-refresh', 'at-placeholder-access']) expect(JSON.stringify([w.h.out, w.h.err, w.h.calls.map(c => c.argv)])).not.toContain(secret)
@@ -257,7 +257,7 @@ test('a plain key never overwrites a ChatGPT sign-in: login reads the item first
   for (const [platform, tool, read] of [['darwin', false, READ], ['linux', true, LOOKUP]] as const) {
     const w = world({ platform, tool, items: { acme: SIGN_IN } })
     expect(await w.cli('login', 'acme')).toBe(1)
-    expect(w.h.err).toEqual(['klyth auth: acme holds a ChatGPT sign-in; run logout first, or login --chatgpt'])
+    expect(w.h.err).toEqual(['klyth auth: acme holds a ChatGPT sign-in. Run klyth auth logout acme first, or klyth auth login chatgpt --provider acme'])
     expect([w.h.calls, w.h.items]).toEqual([[{ argv: read }], { 'klyth:acme': SIGN_IN }])
     expect(w.said()).not.toContain(KEY)
   }
@@ -292,7 +292,7 @@ test('a misuse exits 2 with the usage and never echoes an argument: a key typed 
   for (const args of cases) {
     const w = world()
     expect(await w.cli(...args)).toBe(2)
-    expect(w.h.err.join('\n')).toContain('usage: bun run auth login|logout <provider>')
+    expect(w.h.err.join('\n')).toContain('This is the legacy form. Use klyth auth --help.')
     expect(w.said()).not.toContain(KEY)
     expect([w.h.asked, w.h.calls, w.h.ports]).toEqual([0, [], []])
   }

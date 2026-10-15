@@ -144,7 +144,7 @@ test('new API-key grammar does not import legacy credential-record stdin', async
   const w = world({ tty: false, stdin: record })
   expect(await w.run('auth', 'login', 'api-key', 'alpha', '--stdin')).toBe(1)
   expect(w.items).toEqual({})
-  expect(w.said()).toContain('legacy bun run auth path')
+  expect(w.said()).toContain('klyth auth import <provider-id>')
   expect(w.said()).not.toContain('refresh')
 })
 

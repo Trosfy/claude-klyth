@@ -35,9 +35,9 @@ export function createKeys(run: Runner, now: () => number) {
       return failed(`klyth: ${p.id} key helper did not finish (${redact(firstLine(String(err))).slice(0, 200)}); unlock the keychain or fix auth.command, then retry`)
     }
     // A helper that says why it failed (its first stderr line) is quoted in place of the keychain guess.
-    if (r.exitCode !== 0) return failed(`klyth: ${p.id} key helper failed (exit ${r.exitCode}): ${r.stderr ? r.stderr.replace(/^klyth auth: /, '') : `keychain locked, or no key stored? Run bun run auth login ${p.id}`}`)
+    if (r.exitCode !== 0) return failed(`klyth: ${p.id} key helper failed (exit ${r.exitCode}): ${r.stderr ? r.stderr.replace(/^klyth auth: /, '') : `keychain locked, or no key stored? Run klyth auth login api-key ${p.id}`}`)
     const key = r.stdout.trim()
-    if (!isUsableKey(key)) return failed(`klyth: ${p.id} key helper printed no usable key (empty, over 4 KiB, or holding spaces, control or non-ASCII characters); run bun run auth login ${p.id}`)
+    if (!isUsableKey(key)) return failed(`klyth: ${p.id} key helper printed no usable key (empty, over 4 KiB, or holding spaces, control or non-ASCII characters). Run klyth auth login api-key ${p.id}`)
     keys.set(fp, { key, until: now() + auth.ttlSeconds * 1000 })
     failures.delete(fp)
     return { key, cached: false }

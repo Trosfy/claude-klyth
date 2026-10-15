@@ -5,7 +5,7 @@ import type { ChatGptIo } from './chatgpt'
 export type ExtraSignIn<Id extends string = string, Method extends string = string> = {
   client: ExtraClient<Id, Method>
   deviceLogin(io: ChatGptIo, provider: string): Promise<Record<string, string | undefined> | number>
-  refresh: { tokenUrl: string; fields: Record<string, string>; loginFlags: string; refusedClient(provider: string): string }
+  refresh: { tokenUrl: string; fields: Record<string, string>; loginHint(provider: string): string; refusedClient(provider: string): string }
   authUserAgent(env: Readonly<Record<string, string | undefined>>): { userAgent?: string } | { error: string }
   clientId(env: Readonly<Record<string, string | undefined>>): string | undefined
   cliFlags: readonly string[]

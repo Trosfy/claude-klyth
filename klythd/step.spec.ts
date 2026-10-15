@@ -86,7 +86,7 @@ test('the request goes to baseUrl with the codec path, the key as a bearer heade
   expect(r.url).toBe('https://klyth.invalid/v1/chat/completions')
   expect(r.headers).toEqual({ 'content-type': 'application/json', 'x-tag': 'klyth', 'user-agent': 'evil/1', authorization: `Bearer ${KEY}-1` })
   expect(JSON.parse(r.body)).toMatchObject({ model: 'm', reasoning_effort: 'high', messages: [{ role: 'system', content: 'SYS' }, { role: 'user', content: 'hi' }] })
-  expect([r.stallS, r.totalS, r.allowHttp]).toEqual([600, 1800, false])
+  expect([r.stallS, r.totalS, r.allowHttp]).toEqual([600, undefined, false])
   const { h: bare, s: s2 } = fake()
   const unnamed = wire({ target: 'other/m' })
   await events(s2, unnamed)
@@ -137,8 +137,8 @@ test("a step's own timeoutMs bounds its provider request, and the provider's tim
     ...wire(requestMs === undefined ? {} : { timeoutMs: requestMs }),
     configText: JSON.stringify({ providers: { acme: { ...acme, ...(providerMs === undefined ? {} : { timeoutMs: providerMs }) } } }),
   })
-  const cases: [number | undefined, number | undefined, [number, number]][] = [
-    [undefined, undefined, [600, 1800]],
+  const cases: [number | undefined, number | undefined, [number, number | undefined]][] = [
+    [undefined, undefined, [600, undefined]],
     [undefined, 20_000, [20, 20]],
     [undefined, 20_500, [20, 21]],
     [undefined, 900_000, [600, 900]],
@@ -163,7 +163,6 @@ test("a timeout names the step's whole bound and the key of the tighter one: cla
     [5_000, 20_000, 5, 'providers.acme.timeoutMs'],
     [20_000, 20_000, 20, 'providers.acme.timeoutMs'],
     [5_000, undefined, 5, 'providers.acme.timeoutMs'],
-    [undefined, undefined, 1800, 'providers.acme.timeoutMs'],
   ]
   for (const [providerMs, requestMs, bound, key] of cases) {
     for (const reply of [{ before: total }, { body: half, cut: total }] as Reply[]) {
@@ -173,6 +172,69 @@ test("a timeout names the step's whole bound and the key of the tighter one: cla
     }
   }
 })
+
+test('an unbounded stream keeps receiving chunks past 1800 s without a whole-request cut', async () => {
+  let now = 0
+  const clock = spyOn(performance, 'now').mockImplementation(() => now)
+  try {
+    const chunk = sse({ choices: [{ index: 0, delta: { content: 'tick' } }] })
+    const { h, s } = fake([{ pieces: [chunk, chunk, chunk, chunk, OK] }])
+    h.onRead = () => void (now += 500_000)
+    const evs = await events(s)
+    expect(now).toBe(2_500_000)
+    expect(errorOf(evs)).toBeUndefined()
+    expect(evs.filter(e => e.type === 'text').map(e => e.text).join('')).toBe('ticktickticktickhello')
+    expect(evs.map(e => e.type)).toContain('stop')
+    expect(h.posts).toHaveLength(1)
+    expect(h.posts[0]).not.toHaveProperty('totalS')
+    expect(h.posts[0]?.stallS).toBe(600)
+  } finally {
+    clock.mockRestore()
+  }
+})
+
+test('provider and classifier deadlines still cut a stream with arriving chunks', async () => {
+  const acme = (JSON.parse(CONFIG) as { providers: { acme: object } }).providers.acme
+  for (const [providerMs, requestMs, seconds, key] of [
+    [5000, undefined, 5, 'providers.acme.timeoutMs'],
+    [undefined, 20_000, 20, 'classifier.timeoutMs'],
+    [5000, 20_000, 5, 'providers.acme.timeoutMs'],
+    [900_000, 20_000, 20, 'classifier.timeoutMs'],
+  ] as const) {
+    let now = 0
+    const clock = spyOn(performance, 'now').mockImplementation(() => now)
+    try {
+      const chunk = sse({ choices: [{ index: 0, delta: { content: 'tick' } }] })
+      const { h, s } = fake([{ pieces: [chunk, OK] }])
+      h.onRead = () => void (now += seconds * 1000 / 2)
+      const w: StepWire = { ...wire(requestMs === undefined ? {} : { timeoutMs: requestMs }), configText: JSON.stringify({ providers: { acme: { ...acme, ...(providerMs === undefined ? {} : { timeoutMs: providerMs }) } } }) }
+      const evs = await events(s, w)
+      expect(errorOf(evs)).toBe(`klyth: acme timed out after ${seconds} s; retry, or raise ${key}`)
+      expect(evs.filter(e => e.type === 'text')).toEqual([{ type: 'text', text: 'tick' }])
+      expect(h.posts.map(p => p.totalS)).toEqual([seconds])
+      expect(h.cancelled).toBe(1)
+    } finally {
+      clock.mockRestore()
+    }
+  }
+})
+
+test('unbounded retries stop at ten sends even after 1800 s', () => withRandom(0.5, async () => {
+  let now = 0
+  const clock = spyOn(performance, 'now').mockImplementation(() => now)
+  try {
+    const { h, s } = fake([BUSY])
+    h.onPost = () => void (now += 250_000)
+    h.onSleep = ms => void (now += ms)
+    expect(errorOf(await events(s))).toBe(TEN)
+    expect(h.posts).toHaveLength(10)
+    expect(h.slept).toHaveLength(9)
+    expect(now).toBeGreaterThan(1_800_000)
+    expect(h.posts.every(p => !('totalS' in p) && p.stallS === 600)).toBe(true)
+  } finally {
+    clock.mockRestore()
+  }
+}))
 
 test('a keyless step sends no authorization or x-api-key header and runs no helper, on the bearer and the x-api-key kinds alike', async () => {
   const { h, s } = fake()
@@ -193,8 +255,8 @@ test('an unapproved keyless provider is refused before anything is sent, even wh
 
 test('a keyless provider answering 401 or 403 is not retried, runs no helper, and the line names the fix', async () => {
   for (const [status, text] of [
-    [401, 'klyth: free wants a key (HTTP 401) but auth is "none"; run bun run auth login free and set auth.command, then retry'],
-    [403, 'klyth: free HTTP 403: nope; ask the free admin for access; if it wants a key, run bun run auth login free and set auth.command (auth is "none")'],
+    [401, 'klyth: free wants a key (HTTP 401) but auth is "none". Run klyth auth login api-key free and set auth.command, then retry'],
+    [403, 'klyth: free HTTP 403: nope; ask the free admin for access. If it wants a key, run klyth auth login api-key free and set auth.command (auth is "none")'],
   ] as const) {
     const { h, s } = fake([{ status, body: '{"error":{"message":"nope"}}' }])
     expect(errorOf(await events(s, wire({ target: 'free/m' })))).toBe(text)
@@ -225,7 +287,7 @@ test('a rejected cached key is fetched again and the request retried once, befor
     expect(h.posts.map(p => p.headers['authorization'])).toEqual([`Bearer ${KEY}-1`, `Bearer ${KEY}-1`, `Bearer ${KEY}-2`])
   }
   const { h, s } = fake([{ status: 401, body: '{"error":{"message":"bad key"}}' }, {}])
-  expect(errorOf(await events(s))).toBe('klyth: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry')
+  expect(errorOf(await events(s))).toBe('klyth: acme rejected its key (HTTP 401). Store a valid one with klyth auth login api-key acme, then retry')
   expect([h.runs.length, h.posts.length]).toEqual([1, 1])
   await events(s)
   expect(h.runs).toHaveLength(2)

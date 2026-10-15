@@ -3,7 +3,7 @@
 Each Klyth error is one line: what failed, then the fix. In the messages below, `<p>` is a provider id, `N` is a
 number, and `…` is text that varies. A message that names `klyth.json` shows the file Klyth read. This page writes it
 with the default path `~/.claude/klyth.json`. That path follows `$CLAUDE_CONFIG_DIR` when you set that variable. Run
-commands that start with `bun run` in the `klyth` folder.
+`klyth auth` commands from any folder. Run Bun scripts from the Klyth folder.
 
 ## First look
 
@@ -13,6 +13,34 @@ tokens of recent steps. A `next:` line names the first fix. `claude --debug` log
 ```text
 klyth step <who> → <target> kind= http= effort= msgs= tools= bytes= ttfb= total= in= out= cache= wrote= reasoning= store=file|memory restored=<ids>/<blocks> finish=
 ```
+
+## The `klyth` command
+
+Klyth's hook installs `~/.local/bin/klyth` after the first plugin load. This release uses Bun and does not ship a compiled
+helper. Klyth does not replace a command from another program. It does not restore a command that you remove.
+
+`klyth: command not found` means that your shell cannot find the command. Check these causes:
+
+- `~/.local/bin` is not in `PATH`. Add it to `PATH`, or run `~/.local/bin/klyth`.
+- Another program owns `~/.local/bin/klyth`. Klyth leaves that file unchanged. Use
+  `bun /absolute/path/to/klyth/scripts/cli.ts auth …` from the Klyth folder.
+- You removed `~/.local/bin/klyth`. To install it again, move `~/.local/share/klyth/launcher` to the Trash, then start a
+  new Claude Code session. Klyth does not reinstall it until you do this.
+- Klyth skips the install if HOME is not canonical. It writes one debug line. Klyth also skips the install if a folder in
+  `~/.local`, `~/.local/bin`, `~/.local/share` or `~/.local/share/klyth` has a symlink or wrong owner. Group or other
+  write access also blocks installation. Use a canonical HOME. Set the folder owner and mode. Then start a new session.
+
+The installer writes its record before it publishes the command. If Klyth stops between those steps, the next session
+counts the command as removed. Move `~/.local/share/klyth/launcher` to the Trash and start a new session to try again.
+Before you remove `~/.local/bin/klyth`, check its second line with `sed -n 2p ~/.local/bin/klyth`.
+Remove the file only if that line starts with `# klyth-launcher 1.`. Leave a file from another program alone.
+After a downgrade, move the Klyth launcher and `~/.local/share/klyth/launcher` to the Trash.
+Then start a session of the release that you want.
+
+| Message | Cause and fix |
+| --- | --- |
+| `klyth: Bun is not installed. Install Bun, then try again.` | Install Bun, then run the command again. |
+| `klyth: the Klyth release of this command is gone. Start Claude Code once with Klyth, then try again.` | The launcher names a release that is no longer available. Start Claude Code once with Klyth, then run the command again. |
 
 ## The `klyth step` debug line
 
@@ -126,7 +154,7 @@ history, not a disposable cache. Klyth never evicts, expires or removes them on 
 
 | Message | Cause and fix |
 | --- | --- |
-| `klyth: bun not found — install bun (https://bun.sh), then retry` | Klyth looks on `PATH` and in `~/.bun/bin`. |
+| `klyth: bun not found` | Klyth looks on `PATH` and in `~/.bun/bin`. Install Bun from `bun.sh`, then retry. |
 | `klyth: klythd did not start (see the debug log); run /klyth reload, then retry` | klythd printed no ready line within 3 s. Run `bun klythd/main.ts` in the `klyth` folder to see why. |
 | `klyth: klythd crashed twice; routed models paused until /klyth reload` | klythd crashed twice within one minute. Read the debug log and fix the cause. |
 | `klyth: klythd did not answer (curl exit N); run /klyth reload, then retry` | The helper or its socket is gone. Klyth restarts a helper that exits with no answer and no crash, and resends the step once. This message means that did not help, or curl failed in a way that allows no resend. Make sure that `/usr/bin/curl` exists. |
@@ -148,9 +176,9 @@ approved provider. `/klyth` never runs the key command ([`auth`](CONFIG.md#provi
 | `klyth: can't switch to <arg>: config error, …` | This is the same error, seen from `/model`. The native model stays active. |
 | `klyth: couldn't switch to <arg> (internal error; see the debug log). Native model unchanged` | This is a bug in the `/model` handling. Read the debug log, then retry. |
 | `klyth: provider "<p>" is not declared (declared: …)`, `klyth: "<model>" is not declared under provider <p> (…)` and `klyth: "<arg>" is not a klyth alias or model` | The name does not match your file. Check the alias and the models of the provider. |
-| `providers.<p>.auth: missing; run bun run auth login <p>, …` | Every provider needs `auth.command`, or `"auth": "none"` for a server that checks no key. |
+| `providers.<p>.auth: missing; run klyth auth login api-key <p>, …` | Every provider needs `auth.command`, or `"auth": "none"` for a server that checks no key. |
 | `providers.<p>.auth: "none" is not allowed on a bedrock provider; Bedrock needs a key` | Use `auth.command`. |
-| `providers.<p>.apiKeyEnv: no longer read; …` and `providers.<p>.auth.env: not supported; …` | Keys come only from a command. Run `bun run auth login <p>`, and remove the old key. |
+| `providers.<p>.apiKeyEnv: no longer read; …` and `providers.<p>.auth.env: not supported; …` | Keys come only from a command. Run `klyth auth login api-key <p>`, and remove the old key. |
 | `providers.<p>.baseUrl: must use https (plain http needs "allowHttp": true on the provider)` | Use https, or set `allowHttp`. |
 | `providers.<p>.baseUrl: the host must be a DNS name …` | Klyth refuses `localhost`. Use `127.0.0.1` or a real host name. |
 | `providers.<p>.<key>: unknown key` | The key is a typo, a key of another kind, or a key at the wrong level. `maxTokensParam` belongs under a model of the `openai` or `openai-responses` kind, not under a provider. |
@@ -180,17 +208,18 @@ silently.
 
 | Message | Cause and fix |
 | --- | --- |
-| `klyth: <p> key helper failed (exit N): keychain locked, or no key stored? Run bun run auth login <p>` | Unlock the Keychain, or store the key. When the command prints why it failed, Klyth shows that line in place of this guess. |
+| `klyth: <p> key helper failed (exit N): keychain locked, or no key stored? Run klyth auth login api-key <p>` | Unlock the Keychain, or store the key. When the command prints why it failed, Klyth shows that line in place of this guess. |
 | `klyth: <p> key helper did not finish (…); unlock the keychain or fix auth.command, then retry` | The command could not start, or it ran past 10 s. Run it by hand and fix it. |
-| `klyth: <p> key helper printed no usable key (…); run bun run auth login <p>` | A key is 1 to 4096 visible ASCII characters with no spaces. |
-| `klyth auth: storing <p> takes a N-byte security -i line, over its 4000-byte limit; nothing stored` | On macOS, `bun run auth` gives the Keychain one line through `security -i`, which runs the rest of a longer line as a command of its own. Klyth stores nothing, and the item already there stays. Keep a key that long in your own tool, and point `auth.command` at it. A ChatGPT sign-in that long cannot go in the Keychain yet: open an issue. |
-| `klyth auth: providers.<p> is not in <path> (or the file is missing or not JSON); Run /klyth setup first` | The login ran with `--write-config`, but `klyth.json` has no such provider. |
+| `klyth: <p> key helper printed no usable key (empty, over 4 KiB, or holding spaces, control or non-ASCII characters). Run klyth auth login api-key <p>` | A key is 1 to 4096 visible ASCII characters with no spaces. |
+| `klyth auth: storing <p> takes a N-byte security -i line, over its 4000-byte limit; nothing stored` | On macOS, `klyth auth` gives the Keychain one line through `security -i`, which runs the rest of a longer line as a command of its own. Klyth stores nothing, and the item already there stays. Keep a key that long in your own tool, and point `auth.command` at it. A ChatGPT sign-in that long cannot go in the Keychain yet: open an issue. |
+| `klyth auth: providers.<p> is not in <path> (or the file is missing or not JSON); Run /klyth setup first` | The login ran with `--write`, but `klyth.json` has no such provider. |
+| `klyth auth: This looks like a sign-in record. Nothing stored. Use klyth auth import <provider-id> to read a sign-in record` | The API-key login received a serialized sign-in record. Pass it to `klyth auth import <provider-id>` on stdin. |
 | `klyth: provider <p> not approved; native model unchanged. Run /model <arg> again and choose Allow` and `klyth: provider <p> is not approved; run /model <alias> to approve it. The step was not sent` | Run `/model <alias>` and choose **Allow**. [Security](../README.md#security) says what an approval covers. |
 | `klyth agent: provider <p> is not approved; use Agent for a native model` and `klyth agent: provider <p> is not approved; run /model <alias> once and choose Allow` | Run `/model <alias>` once and choose **Allow**. Then ask again. A subagent gets the second form, because only main can show the approval prompt. |
-| `klyth: <p> not approved — run /model <alias> to approve it` | The helper did not learn of the approval. |
-| `klyth: <p> rejected its key (HTTP 401); store a valid one with bun run auth login <p>, then retry` | The key is wrong or expired. For a ChatGPT sign-in, see [ChatGPT sign-in and plan usage](#chatgpt-sign-in-and-plan-usage). Run the matching sign-in command. Login cannot replace a sign-in made with another method. |
-| `klyth: <p> HTTP 403: …; ask the <p> admin for access, or store another key with bun run auth login <p>` | The key may not have access to that route. |
-| `klyth: <p> wants a key (HTTP 401) but auth is "none"; run bun run auth login <p> and set auth.command, then retry` | The server checks a key after all. Set `providers.<p>.auth` to the `command` line that the login prints (`--write-config` does this). A 403 from a keyless provider has the same fix. |
+| `klyth: <p> not approved` | Run `/model <alias>` and choose Allow. The helper did not learn of the approval. |
+| `klyth: <p> rejected its key (HTTP 401). Store a valid one with klyth auth login api-key <p>, then retry` | The key is wrong or expired. For a ChatGPT sign-in, see [ChatGPT sign-in and plan usage](#chatgpt-sign-in-and-plan-usage). Run the matching sign-in command. Login cannot replace a sign-in made with another method. |
+| `klyth: <p> HTTP 403: …; ask the <p> admin for access, or store another key with klyth auth login api-key <p>` | The key may not have access to that route. |
+| `klyth: <p> wants a key (HTTP 401) but auth is "none". Run klyth auth login api-key <p> and set auth.command, then retry` | The server checks a key after all. Set `providers.<p>.auth` to the `command` line that the login prints (`--write` does this). A 403 from a keyless provider has the same fix. |
 | `klyth: your key for <p> can't use <model>; allowed: …` | Pick an allowed model, or ask the admin of the gateway for access. |
 
 A short-term key that stops working after a while needs a key command that mints a new key. `ttlSeconds` must be below
@@ -263,34 +292,35 @@ with its fix, whether it arrives as an HTTP status or in the stream as `klyth: <
 
 - **The sign-in page shows `error_code: 3p_delegated_access_policy_denied`** This text comes from the OpenAI page, not
   from Klyth. A policy on your ChatGPT account, usually from a workspace admin, blocks third-party apps, so
-  `login --chatgpt` cannot finish. Stop it with Ctrl-C. Klyth stored nothing. Ask the admin to allow the app
+  `klyth auth login chatgpt --provider <p>` cannot finish. Stop it with Ctrl-C. Klyth stored nothing. Ask the admin to allow the app
   connection, or use an allowed API-key route. Another sign-in method does not bypass this policy.
-- **`klyth auth: export prints your ChatGPT refresh token; pipe it: bun run auth export <p> | ssh <host> 'cd <klyth-checkout> && bun run auth login <p>'`**
-  `export` does not print to a terminal. Pipe it as the message shows.
-- To see a helper message in full, run `bun run auth token <p> > /dev/null`. The access token is the only thing that
+- **`klyth auth: Export prints your ChatGPT refresh token. First run ssh <host> '"$HOME/.local/bin/klyth" --version'. Then pipe it: klyth auth export <p> | ssh <host> '"$HOME/.local/bin/klyth" auth import <p>'`**
+  `export` does not print to a terminal. A finished pipe does not prove that the other machine stored the sign-in. A
+  failed import can require a new sign-in.
+- To see a helper message in full, run `klyth auth token <p> > /dev/null`. The access token is the only thing that
   this command prints on stdout, so the redirect keeps it off your screen.
 
 | Message | Cause and fix |
 | --- | --- |
 | `klyth: <p> HTTP 429: …; your ChatGPT plan's usage limit for klyth is reached; wait for it to reset, or raise it in ChatGPT settings` | You used up the usage limit for Klyth that you set in your ChatGPT settings. |
-| `klyth: <p> HTTP 403: …; this ChatGPT plan cannot be used in other apps; use an API key (bun run auth login <p>, kind openai or openai-responses)` | OpenAI does not let the plan of this account run in other apps. Run `bun run auth logout <p>` first, because plain `login` refuses to replace a sign-in. Or give the API-key provider its own id. |
-| `klyth: <p> HTTP 401: …; sign in again with bun run auth login <p> --chatgpt` | OpenAI no longer accepts the sign-in. |
-| `klyth: <p> HTTP 400: …; this model or route is not available on ChatGPT plan usage; pick a model from bun run auth login <p> --chatgpt's list` | Login prints the models on your plan after it signs in. |
+| `klyth: <p> HTTP 403: …; This ChatGPT plan does not permit other apps. Use an API key (klyth auth login api-key <p>, kind openai or openai-responses)` | OpenAI does not let the plan of this account run in other apps. Run `klyth auth logout <p>` first, because `klyth auth login api-key <p>` refuses to replace a sign-in. Or give the API-key provider its own id. |
+| `klyth: <p> HTTP 401: …; sign in again with klyth auth login chatgpt --provider <p>` | OpenAI no longer accepts the sign-in. |
+| `klyth: <p> HTTP 400: …; ChatGPT plan usage does not include this model or route. Pick a model from klyth auth login chatgpt --provider <p>'s list` | Login prints the models on your plan after it signs in. |
 | `klyth: <p> HTTP 400: …; ChatGPT plan usage does not support an input, tool or param of this request; set the model's vision to false, or drop the one the message names` | Plan usage refuses some inputs, such as images, and some params. Set `"vision": false` on the model, or remove the param that the message names. |
 | `klyth: <p> HTTP 503: …; ChatGPT plan usage is unavailable for this account right now; retry later, or use an API key` | OpenAI says that plan usage is down for this account. |
-| `klyth: <p> key helper failed (exit 3): the ChatGPT sign-in expired or was revoked; run bun run auth login <p> --chatgpt` | OpenAI refused the refresh. The cause may be expiry, revocation, an account policy, or another copy that rotated the token ([one sign-in per machine](PROVIDERS.md#openai-with-your-chatgpt-plan)). The helper cannot infer a fixed authorization lifetime from this error. Plain `login` refuses to replace a sign-in. |
+| `klyth: <p> key helper failed (exit 3): The ChatGPT sign-in expired or ChatGPT revoked it. Run klyth auth login chatgpt --provider <p>` | OpenAI refused the refresh. The cause may be expiry, revocation, an account policy, or another copy that rotated the token ([one sign-in per machine](PROVIDERS.md#openai-with-your-chatgpt-plan)). The helper cannot infer a fixed authorization lifetime from this error. `klyth auth login api-key <p>` does not replace a ChatGPT sign-in. |
 | `klyth: <p> key helper failed (exit 4): ChatGPT refuses a refresh until <time>; retry then` | The access token ran out, and OpenAI does not allow a refresh yet. |
-| `klyth: <p> key helper failed (exit 1): another klyth refresh is running (lock <p>.lock in ~/.cache/klyth); retry` | Another Klyth process was refreshing the sign-in. The next refresh takes over a lock that is 30 s old. If the line keeps coming back while no Klyth refresh runs, trash that file. While a refresh runs, `bun run auth export <p>` stops with the same `klyth auth:` line. |
+| `klyth: <p> key helper failed (exit 1): another klyth refresh is running (lock <p>.lock in ~/.cache/klyth); retry` | Another Klyth process was refreshing the sign-in. The next refresh takes over a lock that is 30 s old. If the line keeps coming back while no Klyth refresh runs, trash that file. While a refresh runs, `klyth auth export <p>` stops with the same `klyth auth:` line. |
 | `klyth: <p> key helper failed (exit 1): storing <p> takes a N-byte security -i line, over its 4000-byte limit; nothing stored` | The refresh worked, but the new sign-in is too long for the Keychain ([above](#keys-and-approval)). The stored sign-in stays, and its refresh token is used up, so the next refresh fails with exit 3. Open an issue. |
-| `klyth: <p> key helper failed (exit 1): no ChatGPT sign-in readable for <p> in the … (locked, or none stored); run bun run auth login <p> --chatgpt` | Unlock the keyring, or sign in. |
-| `klyth auth: the sign-in did not complete within 5 minutes; run login again` | Finish the sign-in in time. |
-| `klyth auth: the pasted URL's state does not match this sign-in; run login again` | The URL that you pasted came from an earlier attempt, or it is not a URL. Each login prints a new URL. |
-| `klyth auth: ChatGPT plan usage was not granted; run login again and allow klyth to use your plan` | You completed the sign-in page without allowing Klyth to use your plan. Klyth stored nothing. |
+| `klyth: <p> key helper failed (exit 1): no ChatGPT sign-in readable for <p> in the … (locked, or none stored). Run klyth auth login chatgpt --provider <p>` | Unlock the keyring, or sign in. |
+| `klyth auth: the sign-in did not complete within 5 minutes; run login again` | Finish the sign-in in time. If it expires, run `klyth auth login chatgpt --provider <p>`. |
+| `klyth auth: the pasted URL's state does not match this sign-in; run login again` | The URL that you pasted came from an earlier attempt, or it is not a URL. Start a new sign-in with `klyth auth login chatgpt --provider <p>`. Each login prints a new URL. |
+| `klyth auth: ChatGPT plan usage was not granted; run login again and allow klyth to use your plan` | You completed the sign-in page without allowing Klyth to use your plan. Klyth stored nothing. Run `klyth auth login chatgpt --provider <p>` again and allow Klyth to use your plan. |
 | `klyth auth: ChatGPT refused the sign-in (<error>: <description>)` | The words of OpenAI follow. If a workspace admin controls third-party apps, ask the admin, or use an API key. |
-| `klyth auth: ChatGPT's ID token failed its … check; nothing stored; run login again` | The sign-in answer did not match this login. |
-| `klyth auth: the sign-in changed while it was written (a refresh ran), so the copy sent is stale; <p> stays in the …; export again` | A refresh rotated the sign-in while `export` wrote it, so the other machine got a copy that OpenAI refuses. The newer sign-in stays here. `login` on the other machine replaces the stale copy. |
-| `klyth auth: <p> holds a ChatGPT sign-in; run logout first, or login --chatgpt` | Plain `login` stores an API key and does not replace a sign-in. |
-| `klyth auth: selected provider does not match the official ChatGPT backend; Run /klyth setup first` | With `--chatgpt --write-config`, the provider needs `baseUrl` `https://api.openai.com/v1` and kind `openai-responses`. |
+| `klyth auth: ChatGPT's ID token failed its … check; nothing stored; run login again` | The sign-in answer did not match this login. Start a new sign-in with `klyth auth login chatgpt --provider <p>`. |
+| `klyth auth: the sign-in changed while it was written (a refresh ran), so the copy sent is stale; <p> stays in the …; export again` | A refresh rotated the sign-in while `klyth auth export <p>` wrote it, so the other machine got a copy that OpenAI refuses. The newer sign-in stays here. Run `klyth auth export <p>` again and import the new copy on the other machine. |
+| `klyth auth: <p> holds a ChatGPT sign-in. Run klyth auth logout <p> first, or klyth auth login chatgpt --provider <p>` | `klyth auth login api-key <p>` stores an API key and does not replace a sign-in. |
+| `klyth auth: selected provider does not match the official ChatGPT backend; Run /klyth setup first` | With `klyth auth login chatgpt --provider <p> --write`, the provider needs `baseUrl` `https://api.openai.com/v1` and kind `openai-responses`. |
 
 ## Context size
 
@@ -573,9 +603,15 @@ while Klyth is still loaded, set `compaction.hostWindow` to `false` and run `/kl
 you disable or uninstall Klyth.** A live unload cannot restore the process-wide environment value. A fresh process
 without Klyth inherits its ordinary environment.
 
-Remove credentials you no longer need with `bun run auth logout <p>` from the Klyth checkout. A local logout does not
+Remove credentials you no longer need with `klyth auth logout <p>`. A local logout does not
 revoke the ChatGPT app connection on the provider side. To revoke it too, disconnect Klyth in your ChatGPT settings.
 Keyless providers have no stored credential to remove.
+
+Stop all Klyth sessions. Check `~/.local/bin/klyth` with `sed -n 2p ~/.local/bin/klyth`.
+Move that file to the Trash only if its second line starts with `# klyth-launcher 1.`.
+Leave a file from another program alone. Then move these Klyth state files to the Trash:
+`~/.local/share/klyth/launcher`, `~/.local/share/klyth/launcher.lock`, `~/.local/bin/.klyth-launcher.tmp` and
+`~/.local/share/klyth/launcher.tmp`. Do not move the lock or temp files while Klyth runs.
 
 Uninstall with `claude plugin uninstall klyth@klyth` and `claude plugin marketplace remove klyth`. Remove any
 status-line setting you added, then restart. Klyth keeps its provider approvals and saved routes in its own host plugin

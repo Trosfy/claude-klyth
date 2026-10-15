@@ -100,6 +100,8 @@ async function scenario(options: { earlyClassic?: boolean; missingConfig?: boole
     assert.equal(timers.length, 0, 'early classic must not schedule automatic work')
   }
   await find('session.start')($, { cwd: '/w', surface: null }, async () => ({}))
+  // The launcher timer does not queue a compaction command.
+  timers.splice(timers.findIndex(t => t.ms === 0), 1)[0]?.fn()
   if (options.missingConfig) {
     assert.equal(toasts.some(text => text.includes('saved main route could not be restored')), true, 'loaded missing config still blocks saved route')
     assert.equal(state.get('main'), '!klyth-main-choice-blocked')
@@ -119,6 +121,8 @@ async function scenario(options: { earlyClassic?: boolean; missingConfig?: boole
     register(on, {} as never)
     preparingRestart = false
     await find('session.start')($, { cwd: '/w', surface: null }, async () => ({}))
+    // The launcher timer does not queue a compaction command.
+    timers.splice(timers.findIndex(t => t.ms === 0), 1)[0]?.fn()
     assert.equal(state.get('main'), 'fast', 'fresh registration restores from durable store before scheduling')
   }
   if (options.migrate) {

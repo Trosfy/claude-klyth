@@ -21,7 +21,7 @@ instead. `/klyth setup` configures a provider interactively. The `klyth` command
 the macOS Keychain or in Linux `secret-tool`. It has explicit login methods:
 
 ```sh
-klyth auth login chatgpt --write
+klyth auth login chatgpt --provider chatgpt --write
 klyth auth login api-key openai --write
 klyth auth status openai --json
 klyth doctor
@@ -29,10 +29,9 @@ klyth doctor
 
 From a source checkout, replace `klyth` with `bun /absolute/path/to/klyth/scripts/cli.ts`.
 
-- `--write` (or `--write-config`) updates `auth.command` of a provider that is already in `klyth.json`. For a new
-  provider, run `/klyth setup` first. For ChatGPT, the provider must also match its recipe, with the same `kind` and
-  `baseUrl`. Otherwise login stops before it signs in. Without `--write`, login stores the credential and leaves the
-  configuration alone.
+- `--write` updates `auth.command` of a provider that is already in `klyth.json`. For a new provider, run `/klyth setup`
+  first. For ChatGPT, the provider must also match its recipe, with the same `kind` and `baseUrl`. Otherwise login stops
+  before it signs in. Without `--write`, login stores the credential and leaves the configuration alone.
 - `--provider <id>` replaces the default ChatGPT provider id `chatgpt`.
 - Login does not replace a credential made with a different sign-in method. Run `klyth auth logout <provider-id>` first,
   or choose another provider id.
@@ -41,14 +40,14 @@ From a source checkout, replace `klyth` with `bun /absolute/path/to/klyth/script
   unlock a secret only to check that it exists.
 - `klyth auth token` prints an access token for the credential helper. Never run it where a chat transcript records it.
 
-In a Klyth checkout, `bun run auth` runs the same store operations. A provider id follows
+In a Klyth checkout, `bun run auth` is the legacy form and still works. A provider id follows
 [the rules in CONFIG.md](CONFIG.md#providers).
 
 ```sh
-bun run auth login openai                  # asks for the key (hidden), stores it, prints the auth line
-bun run auth login openai --write-config   # also writes that line into providers.openai
-bun run auth list openai                   # says whether the item exists, never prints the key
-bun run auth logout openai                 # removes the item and leaves klyth.json unchanged
+klyth auth login api-key openai            # asks for the key (hidden), stores it, prints the auth line
+klyth auth login api-key openai --write    # also writes that line into providers.openai
+klyth auth status openai                  # says whether the item exists, never prints the key
+klyth auth logout openai                  # removes the item and leaves klyth.json unchanged
 ```
 
 - On macOS, the key command is `/usr/bin/security find-generic-password -s klyth -a <provider> -w`. The key reaches
@@ -58,8 +57,8 @@ bun run auth logout openai                 # removes the item and leaves klyth.j
   `secret-tool`. Without `secret-tool`, `login` prints lines for `pass` and `op read` and exits 1. A locked, denied or
   unavailable keyring is an error, not proof that the item is absent.
 - Any other store works if its command has an absolute path and prints the key.
-- A ChatGPT sign-in uses the same keyring item and adds three commands: `login <provider> --chatgpt`, `token <provider>`
-  and `export <provider>`. `token` is the key command.
+- A ChatGPT sign-in uses the same keyring item and adds three commands: `klyth auth login chatgpt --provider <id>`,
+  `klyth auth token <id>` and `klyth auth export <id>`. `token` is the key command.
 
 ```json
 "auth": { "command": ["/usr/bin/pass", "show", "klyth/openai"] }
@@ -75,16 +74,16 @@ process.
 1. Stop every Claude Code process that uses either plugin, their helper processes and all other auth commands. Keep them
    stopped until migration ends. A lock does not protect a copy from an old runtime that still refreshes.
 2. Prepare `klyth.json` in your Claude config directory. Review the old config. Do not only rename it. Use service
-   `klyth` in keyring commands. Use absolute paths in the Klyth checkout that you keep for `scripts/auth.ts` and the
+   `klyth` in keyring commands. Use absolute paths in the Klyth checkout that you keep for `scripts/cli.ts` and the
    status-line helper. Change each `STYX_*` environment key to its `KLYTH_*` counterpart. A provider that uses a
-   sign-in must keep its `token <provider>` helper. Do not read its serialized OAuth record directly as an API key.
+   sign-in must keep its `klyth auth token <provider>` helper. Do not read its serialized OAuth record directly as an API key.
 3. Replace the `styx@claude-styx` plugin with `klyth@klyth`. The [Quickstart](../README.md#quickstart) has the install
    commands. Do not load both plugins. Installing the plugin does not transfer credentials and does not authorize
    routing.
 4. From the Klyth checkout, run this command for each provider:
 
    ```sh
-   bun run auth migrate <provider> --from styx --runtimes-stopped
+   klyth auth migrate <provider> --from styx --runtimes-stopped
    ```
 
    The command requires the `--runtimes-stopped` flag. The flag states that you stopped the old and new runtimes and all
@@ -110,7 +109,7 @@ Refresh-token rotation can invalidate one of them. To retire the source, add `--
 all other auth commands stay stopped:
 
 ```sh
-bun run auth migrate <provider> --from styx --runtimes-stopped --retire-source
+klyth auth migrate <provider> --from styx --runtimes-stopped --retire-source
 ```
 
 Retirement runs only after the readback check and any required host-id transfer. Migration refuses to remove a source
@@ -157,12 +156,12 @@ OpenAI's current requirements. Workspace admins can disable apps, and Enterprise
 by default. "Sign in with ChatGPT" has its own admin control. A workspace that blocks third-party app connections cannot
 use this path. Ask the admin or use an allowed API-key route. Another sign-in method does not bypass this policy.
 
-Add the provider and an alias to `klyth.json`. The `auth` line is a stand-in. With `--write` or `--write-config`, login
-replaces it. Otherwise login prints the line to paste. Use the model ids that login lists for your account.
+Add the provider and an alias to `klyth.json`. The `auth` line is a stand-in. With `--write`, login replaces it.
+Otherwise login prints the line to paste. Use the model ids that login lists for your account.
 
 ```json
 "chatgpt": { "kind": "openai-responses", "baseUrl": "https://api.openai.com/v1",
-             "auth": { "command": ["/path/to/bun", "/path/to/klyth/scripts/auth.ts", "token", "chatgpt"], "ttlSeconds": 600 },
+             "auth": { "command": ["/path/to/bun", "/path/to/klyth/scripts/cli.ts", "auth", "token", "chatgpt"], "ttlSeconds": 600 },
              "models": { "gpt-6.1-sol": { "contextWindow": 400000, "maxInputTokens": 272000, "maxOutputTokens": 128000,
                                           "params": { "include": ["reasoning.encrypted_content"], "reasoning": { "summary": "auto" } },
                                           "effort": { "low": { "reasoning": { "effort": "low" } }, "medium": { "reasoning": { "effort": "medium" } },
@@ -176,13 +175,12 @@ replaces it. Otherwise login prints the line to paste. Use the model ids that lo
 Then sign in:
 
 ```sh
-klyth auth login chatgpt --write
-bun run auth login chatgpt --chatgpt --write-config
+klyth auth login chatgpt --provider chatgpt --write
 ```
 
-The second line is the source-checkout form. In it, the first `chatgpt` is the provider id. Login prints a URL, opens it
-in your browser and waits up to 5 minutes. Sign in and allow Klyth to use your plan. Login stores the sign-in in the
-Keychain (`secret-tool` on Linux) and lists the models on your plan. Then type `/model sol` and approve the provider.
+Login prints a URL, opens it in your browser and waits up to 5 minutes. Sign in and allow Klyth to use your plan. Login
+stores the sign-in in the Keychain (`secret-tool` on Linux) and lists the models on your plan. Then type `/model sol` and
+approve the provider.
 
 The key command prints an access token and refreshes it without a browser. The refresh token stays in the keyring item,
 never in config or argv. Expiry, revocation, account policy or token rotation can require a new interactive login.
@@ -196,11 +194,12 @@ options:
 - **Paste the URL.** Sign in on any device. The page it lands on may not load, but the address bar holds the URL. Paste
   that URL soon into the waiting terminal, because its code is short-lived. Pass `--no-browser` when the machine has no
   browser.
-- **Move the sign-in.** Sign in on a laptop, then run
-  `bun run auth export chatgpt | ssh <host> 'cd klyth && bun run auth login chatgpt'`. The provider must already be in
-  that machine's `klyth.json`. Add `--write-config` to the second command to write its key command. `export` refuses a
-  terminal and removes the local item after it writes the whole sign-in. It does not check that the destination stored
-  the sign-in, so a failed import can require a new sign-in.
+- **Move the sign-in.** First check that the remote launcher works:
+  `ssh <host> '"$HOME/.local/bin/klyth" --version'`. Then sign in on a laptop and run
+  `klyth auth export chatgpt | ssh <host> '"$HOME/.local/bin/klyth" auth import chatgpt'`. The provider must already be
+  in that machine's `klyth.json`. Add `--write` to the import command to write its key command. `export` refuses a terminal
+  and removes the local item after it writes the whole sign-in. A finished pipe does not prove that the other machine
+  stored the sign-in. A failed import can require a new sign-in.
 
 No option bypasses a workspace or single sign-on policy that refuses third-party apps. If your browser hides the URL,
 or you cannot copy a URL of about 300 characters, use another device or the move.
@@ -212,8 +211,8 @@ machine, or stop using the source before you move a sign-in.
 **Headless Linux.** Login needs `secret-tool` with a running keyring daemon and an unlocked login collection.
 
 **Limits.** The registered-app preview supports a per-app plan allowance in ChatGPT settings. Reaching it produces an
-HTTP 429 usage-limit error. `logout` removes only the local sign-in. To end the provider-side connection, also revoke
-the matching app in ChatGPT settings.
+HTTP 429 usage-limit error. `klyth auth logout <provider id>` removes only the local sign-in. To end the provider-side
+connection, also revoke the matching app in ChatGPT settings.
 
 **What plan usage does not take.** OpenAI's preview limits say to leave these request fields out: `background`,
 `conversation`, `max_output_tokens`, `max_tool_calls`, `metadata`, `moderation`, `multi_agent`, `prompt`,
@@ -239,7 +238,7 @@ and no account headers.
 "aliases": { "gpt-responses": "openai-responses/gpt-5" }
 ```
 
-Store the key with `bun run auth login openai-responses`. On Linux, add `--write-config` to replace the example's
+Store the key with `klyth auth login api-key openai-responses`. On Linux, add `--write` to replace the example's
 Keychain command with `secret-tool`. Set `maxTokensParam` on the model, not on the provider. Do not copy it into the
 ChatGPT plan recipes, whose supported params differ.
 
@@ -348,7 +347,7 @@ The address must be a DNS name or an IP address, such as `127.0.0.1` or a LAN or
 - Set `contextWindow` to the size that the server loads: `num_ctx` in Ollama or `--max-model-len` in vLLM. The default
   in Ollama is small. `ollama list` prints the model ids of Ollama.
 - A reasoning model on vLLM needs `--reasoning-parser`. Without it, its `<think>` text arrives as ordinary text. If you
-  start vLLM with `--api-key`, it checks a key. Then use an `auth.command` (`bun run auth login vllm`) instead of
+  start vLLM with `--api-key`, it checks a key. Then use an `auth.command` (`klyth auth login api-key vllm`) instead of
   `"none"`.
 - `"none"` sends no key. Plain HTTP exposes prompts and answers to anyone on the path, and a private LAN does not
   encrypt them. Use HTTPS for a remote endpoint, or an encrypted tunnel that ends at loopback. `allowHttp` is explicit

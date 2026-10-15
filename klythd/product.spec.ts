@@ -15,12 +15,14 @@ import { homedir } from 'node:os'
 const root = join(import.meta.dir, '..')
 const text = (path: string) => readFileSync(join(root, path), 'utf8')
 
-test('manifest, marketplace, command, tool and state owner are Klyth, with attribution and repository unchanged', () => {
+test('manifest, marketplace, command, tool and state owner are Klyth, with Klyth attribution and the repository unchanged', () => {
   expect(PRODUCT).toEqual({ displayName: 'Klyth', plugin: 'klyth', command: 'klyth', tool: 'agent', qualifiedTool: 'mcp__klyth__agent', daemon: 'klythd', config: 'klyth.json' })
   expect(CREDENTIAL_NAMESPACE).toBe('klyth')
   const manifest = JSON.parse(text('.claude-plugin/plugin.json')), market = JSON.parse(text('.claude-plugin/marketplace.json'))
   expect(manifest.name).toBe('klyth')
-  expect(manifest.author.name).toBe('styx contributors')
+  expect([manifest.author.name, market.owner.name]).toEqual(['klyth contributors', 'klyth contributors'])
+  expect(text('LICENSE')).toContain('Copyright (c) 2026 klyth contributors')
+  expect(market.metadata.version).toBe(manifest.version) // a bump changes both manifests
   expect(manifest.repository).toBe('https://github.com/Trosfy/claude-klyth')
   expect([market.name, market.plugins[0].name]).toEqual(['klyth', 'klyth'])
   expect(JSON.parse(text('package.json')).name).toBe('klyth')

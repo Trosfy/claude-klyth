@@ -811,13 +811,13 @@ for (const [when, env, dir, other] of [
     await step($, { turnId: 'cd1', index: 0, agentId: 'rv3' })
     await step($, { turnId: 'cd2', index: 0, agentId: 'u2' })
     expect(w.requests.map(c => systemText(c.body).split('\n')[0])).toEqual([REVIEWER_BODY, 'USER HELPER'])
-    expect(w.fsReads).toEqual([`${dir}/klyth.json`, `${dir}/plugins/installed_plugins.json`, `${PLUGIN_ROOT}/agents/reviewer.md`, `${dir}/agents/helper.md`])
+    expect(w.fsReads).toEqual([`${dir}/klyth.json`, expect.stringMatching(/\/\.claude-plugin\/plugin\.json$/), `${dir}/plugins/installed_plugins.json`, `${PLUGIN_ROOT}/agents/reviewer.md`, `${dir}/agents/helper.md`])
   })
 }
 
 // A gateway refusing every request.
 const FORBIDDEN = { status: 403, pieces: ['{"error":{"message":"Access denied for this route"}}\n'] }
-const FORBIDDEN_TEXT = 'klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with bun run auth login acme'
+const FORBIDDEN_TEXT = 'klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with klyth auth login api-key acme'
 
 test('a routed subagent step that fails at HTTP is answered with one SubagentHandback call carrying the failure text', async ($, on) => {
   const w = world(on, { routes: { hb1: FAST }, upstream: () => FORBIDDEN })

@@ -1,9 +1,9 @@
 {
   "name": "klyth",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A model extension router for Claude Code: keep your Claude subscription connected while routing selected model calls to other providers, with separate credentials and billing",
   "author": {
-    "name": "styx contributors"
+    "name": "klyth contributors"
   },
   "types": "./types/index.d.ts",
   "license": "MIT",

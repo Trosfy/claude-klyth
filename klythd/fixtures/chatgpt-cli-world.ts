@@ -22,7 +22,7 @@ const EMAIL = 'user@example.invalid'
 const NOW = 1_800_000_000_000
 const S = NOW / 1000
 const TOKENS = [ACCESS, REFRESH, NEW_ACCESS, NEW_REFRESH]
-const DEAD_LINE = 'klyth auth: the ChatGPT sign-in expired or was revoked; run bun run auth login chatgpt --chatgpt'
+const DEAD_LINE = 'klyth auth: The ChatGPT sign-in expired or ChatGPT revoked it. Run klyth auth login chatgpt --provider chatgpt'
 const KLYTH_UA = `klyth/${JSON.parse(readFileSync(join(import.meta.dir, '..', '..', '.claude-plugin', 'plugin.json'), 'utf8')).version}`
 const LONG = 'a'.repeat(4000)
 // The refusal of a value whose line to `security -i` (as the fake below reads it) would pass 4000 bytes.

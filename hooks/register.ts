@@ -40,6 +40,7 @@ import { validateUsageEnvelope } from './usage-ledger-codec'
 import { changeUsagePane, openUsagePane, renderUsagePane } from './usage-pane'
 import { runKlythCommand } from './klyth-command'
 import { extraClient } from './extras'
+import { scheduleLauncher, type LauncherPort } from './launcher-session'
 import { createSetupSession } from './setup-session'
 import { renderSetupPane, SETUP_PANE } from './setup-pane'
 import { resolve } from './names'
@@ -54,6 +55,13 @@ const USAGE_PANE_STATE = { plugin: 'klyth', key: 'usagePane' } as const
 
 const debug = ($: EngineInterface, text: string) => $.ui.log(text, { to: 'debug' })
 const say = ($: EngineInterface): Say => ({ toast: text => $.ui.toast(text), debug: text => debug($, text) })
+const launcherPort = ($: EngineInterface): LauncherPort => ({
+  root: $.plugin.root,
+  home: async () => (await $.env.get('HOME')) ?? '', path: async () => (await $.env.get('PATH')) ?? '',
+  version: async () => { const value = JSON.parse(String(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))); return value.version },
+  exists: path => $.fs.exists(path), read: async path => String(await $.fs.read(path)), run: (argv, options) => $.process.run(argv, options),
+  ...say($),
+})
 const recordPort = ($: EngineInterface): RecordPort => ({
   home: async () => (await $.env.get('HOME').catch(() => undefined)) ?? '',
   sessionId: () => $.session.id(),
@@ -347,7 +355,8 @@ export const register: Register = on => {
     s.configReady = true
     await showStatus(statusPort($), s)
     const started = await next(e)
-    setup.start({
+    const launcher = scheduleLauncher(launcherPort($), callback => { $.clock.after(0, callback) })
+    setup.start({ launcher,
       extraClient,
       root: $.plugin.root, home: await loadPort($).home(), configDir: await configDir($),
       exists: path => $.fs.exists(path), read: async path => String(await $.fs.read(path)),
@@ -501,7 +510,7 @@ export const register: Register = on => {
       },
       close: async () => { await $.ui.close({ id: 'klyth-usage' }) },
       text: async () => { for (const line of await usage.text(usagePort($))) $.ui.log(line) },
-    }, sessionId, current, preferences?.value, e.props.bodyColumns, context)
+    }, sessionId, current, preferences?.value, e.props.bodyColumns, context, usage.recordState())
   })
 
   // /clear and a resume end the conversation without a session.start, so the notes owed for it end with it, and the

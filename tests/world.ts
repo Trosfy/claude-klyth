@@ -181,6 +181,7 @@ export function world(on: On, o: WorldOptions = {}) {
     on('ui.open', { id: 'klyth-classifier-approval' }, () => ({ value: { isPlaced: true } }))
     on('ui.panes', () => ({ value: [{ id: 'klyth-classifier-approval', title: 'Review action', isPlaced: true, isShown: true, isFocused: true }] }))
     on('ui.close', { id: 'klyth-classifier-approval' }, () => ({ value: undefined }))
+    on('clock.after', { ms: 0 }, () => ({ value: undefined }))
     on('clock.after', { ms: 8000 }, () => ({ value: undefined }))
     on('clock.after', { ms: 1000 }, ($, e, next) => new Promise(resolve => next.signal.addEventListener('abort', () => resolve({ value: undefined }), { once: true })))
   }

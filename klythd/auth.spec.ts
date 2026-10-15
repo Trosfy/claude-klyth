@@ -79,12 +79,12 @@ test('an unapproved keyless provider is still refused, and the approval of the s
 })
 
 test('a helper that fails, does not finish or prints no usable key fails with one line naming the fix, remembered for status', async () => {
-  const UNUSABLE = 'klyth: acme key helper printed no usable key (empty, over 4 KiB, or holding spaces, control or non-ASCII characters); run bun run auth login acme'
+  const UNUSABLE = 'klyth: acme key helper printed no usable key (empty, over 4 KiB, or holding spaces, control or non-ASCII characters). Run klyth auth login api-key acme'
   const cases: [{ exitCode: number; stdout: string; stderr?: string } | Error, string][] = [
-    [{ exitCode: 1, stdout: '' }, 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme'],
-    [{ exitCode: 1, stdout: '', stderr: '' }, 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme'],
-    [{ exitCode: 3, stdout: '', stderr: 'the sign-in expired; run bun run auth login acme --chatgpt' }, 'klyth: acme key helper failed (exit 3): the sign-in expired; run bun run auth login acme --chatgpt'],
-    [{ exitCode: 3, stdout: '', stderr: 'klyth auth: the sign-in expired; run bun run auth login acme --chatgpt' }, 'klyth: acme key helper failed (exit 3): the sign-in expired; run bun run auth login acme --chatgpt'],
+    [{ exitCode: 1, stdout: '' }, 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run klyth auth login api-key acme'],
+    [{ exitCode: 1, stdout: '', stderr: '' }, 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run klyth auth login api-key acme'],
+    [{ exitCode: 3, stdout: '', stderr: 'the sign-in expired; run klyth auth login chatgpt --provider acme' }, 'klyth: acme key helper failed (exit 3): the sign-in expired; run klyth auth login chatgpt --provider acme'],
+    [{ exitCode: 3, stdout: '', stderr: 'klyth auth: the sign-in expired; run klyth auth login chatgpt --provider acme' }, 'klyth: acme key helper failed (exit 3): the sign-in expired; run klyth auth login chatgpt --provider acme'],
     [new Error(`timed out after 10000 ms\n${KEY}`), 'klyth: acme key helper did not finish (Error: timed out after 10000 ms); unlock the keychain or fix auth.command, then retry'],
     [{ exitCode: 0, stdout: '\n' }, UNUSABLE],
     [{ exitCode: 0, stdout: 'two words\n' }, UNUSABLE],

@@ -20,7 +20,7 @@ const NONE_CONFIG = JSON.stringify({ ...CONFIG_OBJECT, providers: { acme: { ...C
 const NONE_TRUSTED = { [`trust:openai|${ORIGIN}|none`]: true }
 const FAST = { target: 'acme/model-a', label: 'fast' }
 const FORBIDDEN = { status: 403, pieces: ['{"error":{"message":"Access denied for this route"}}\n'] }
-const FORBIDDEN_TEXT = 'klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with bun run auth login acme'
+const FORBIDDEN_TEXT = 'klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with klyth auth login api-key acme'
 const call = ($: Engine, input: Record<string, unknown>) =>
   $.tool.call({ tool: 'mcp__klyth__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore', ...input })
 const deny = async ($: Engine, input: Record<string, unknown>) => ((await call($, input)) as { deny?: string }).deny
@@ -301,8 +301,8 @@ const FAILURES: Row[] = [
     name: 'a key helper that fails',
     opts: { pin: PIN('k'), keyFails: true },
     act: $ => answer($, { turnId: 'k', index: 0 }),
-    text: 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme',
-    fix: 'Run bun run auth login acme',
+    text: 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run klyth auth login api-key acme',
+    fix: 'Run klyth auth login api-key acme',
   },
   {
     name: 'a key helper that cannot run',
@@ -321,15 +321,15 @@ const FAILURES: Row[] = [
     name: 'a rejected key',
     opts: { pin: PIN('x'), upstream: () => ({ status: 401, pieces: ['{"error":{"message":"bad key"}}\n'] }) },
     act: $ => answer($, { turnId: 'x', index: 0 }),
-    text: 'klyth: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry',
-    fix: 'bun run auth login acme, then retry',
+    text: 'klyth: acme rejected its key (HTTP 401). Store a valid one with klyth auth login api-key acme, then retry',
+    fix: 'klyth auth login api-key acme, then retry',
   },
   {
     name: 'a keyless provider that wants a key',
     opts: { pin: PIN('n'), config: NONE_CONFIG, store: NONE_TRUSTED, upstream: () => ({ status: 401, pieces: ['{"error":{"message":"missing key"}}\n'] }) },
     act: $ => answer($, { turnId: 'n', index: 0 }),
-    text: 'klyth: acme wants a key (HTTP 401) but auth is "none"; run bun run auth login acme and set auth.command, then retry',
-    fix: 'run bun run auth login acme and set auth.command, then retry',
+    text: 'klyth: acme wants a key (HTTP 401) but auth is "none". Run klyth auth login api-key acme and set auth.command, then retry',
+    fix: 'Run klyth auth login api-key acme and set auth.command, then retry',
   },
   {
     name: 'a stalled response',

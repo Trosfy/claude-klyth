@@ -42,7 +42,7 @@ test('partial category valuation keeps the known output subtotal separate from f
   const end = recorded(start, 1, measurement(20, 10), price({ output: 4 }))
   const current = end.sessions[0]!
   expect([current.costUsd, current.hasKnownCost, current.costFullyPricedAttempts, current.costIncompleteAttempts]).toEqual([0.00004, true, 0, 1])
-  expect(usageText(current).join('\n')).toContain('Estimated cost: $0.00004 known + unpriced usage')
+  expect(usageText(current).join('\n')).toContain('Estimated cost: At least $0.00004. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
 })
 
 test('failed executions with final usage are priced, while successful executions without usage stay unpriced', () => {
@@ -67,7 +67,7 @@ test('dispatch-time rates preserve historical cost without creating price-histor
   expect(Math.abs(current.costUsd - 0.00003) < 1e-18).toBe(true)
   expect([current.logicalRequests, Object.keys(current.buckets).length]).toEqual([2, 1])
   const report = usageText(current).join('\n')
-  expect(report).toContain('Approx. $0.00003')
+  expect(report).toContain('$0.00003')
   expect(report).not.toContain('rate snapshot')
 })
 
@@ -76,9 +76,9 @@ test('cache reuse is token weighted, and zero-token denominators stay unavailabl
   envelope = recorded(envelope, 1, measurement(5, 1, 5), undefined)
   envelope = recorded(envelope, 2, measurement(30, 1, 0), undefined)
   expect([envelope.sessions[0]?.cacheReadTokens, envelope.sessions[0]?.cacheInputTokens, envelope.sessions[0]?.cacheEligibleAttempts]).toEqual([5, 40, 2])
-  expect(usageText(envelope.sessions[0]!).join('\n')).toContain('Cache reuse: 12.5% (5 / 40 tokens; 2 eligible attempts)')
+  expect(usageText(envelope.sessions[0]!).join('\n')).toContain('Input tokens from cache: 12.5%. 5 of 40 input tokens came from cache across 2 provider calls.')
   const empty = recorded(createUsageEnvelope('session-empty', 1000), 1, measurement(0, 0), undefined)
-  expect(usageText(empty.sessions[0]!).join('\n')).toContain('Cache reuse: Not available (1 eligible attempts; zero-token denominator)')
+  expect(usageText(empty.sessions[0]!).join('\n')).toContain('Input tokens from cache: Not available. 1 provider call reported zero input tokens.')
 })
 
 test('cache-read pricing has an independent positive-token oracle', () => {
@@ -117,17 +117,17 @@ test('known zero counts need no rates, an explicit zero rate values positive usa
   unknown = reduceUsage(unknown, { type: 'summary', token, summary: { type: 'usage_summary', requestId: token.id, executionId, outcome: 'success', attempts: [{ sequence: 1, outcome: 'success', evidence: finalEvidence(partitionedUsage({}, 'anthropic', FIELDS)) }] } })
   unknown = reduceUsage(unknown, { type: 'settle', token, at: 2000 })
   expect([unknown.sessions[0]?.costUsd, unknown.sessions[0]?.hasKnownCost, unknown.sessions[0]?.costFullyPricedAttempts]).toEqual([0, false, 0])
-  expect(usageText(unknown.sessions[0]!).join('\n')).toContain('Estimated cost: Unidentified cost')
+  expect(usageText(unknown.sessions[0]!).join('\n')).toContain('Estimated cost: Not available. Some token counts are missing. Run another request to check usage data.')
   const unpriced = recorded(createUsageEnvelope('session-unpriced', 1000), 1, measurement(12, 4, 2, 1), undefined).sessions[0]!
   expect([unpriced.hasKnownCost, unpriced.costIncompleteAttempts]).toEqual([false, 1])
-  expect(usageText(unpriced).join('\n')).toContain('Estimated cost: Unidentified cost')
+  expect(usageText(unpriced).join('\n')).toContain('Estimated cost: Not available. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
 })
 
 test('a requested cache TTL does not identify the billed cache-write variant', () => {
   const evidence = finalEvidence(partitionedUsage({ input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 10 }, 'anthropic', FIELDS))
   const current = recorded(createUsageEnvelope('session-ttl', 1000), 1, evidence, price({ cacheWrite: { '1h': 1 } }), 'acme/model-a', '1h').sessions[0]!
   expect([current.costUsd, current.hasKnownCost, current.costFullyPricedAttempts, current.costIncompleteAttempts]).toEqual([0, true, 0, 1])
-  expect(usageText(current).join('\n')).toContain('Estimated cost: $0 known + unpriced usage')
+  expect(usageText(current).join('\n')).toContain('Estimated cost: At least $0. Some usage has no cost estimate. Add model prices under pricing in klyth.json.')
 })
 
 test('duplicate, missing and old-generation terminal actions cannot add a request twice', () => {
@@ -168,7 +168,7 @@ test('pricing overflow stays finite and marks accumulated token totals partial',
   expect(Number.isFinite(current.costUsd)).toBe(true)
   expect(current.arithmeticOverflow).toBe(true)
   expect(current.warnings.trackingGap).toBe(true)
-  expect(usageText(current).join('\n')).toContain('affected totals are partial')
+  expect(usageText(current).join('\n')).toContain('Those totals are incomplete')
 })
 
 test('a refused daemon execution with no attempts stays distinct from zero cost', () => {
@@ -183,8 +183,8 @@ test('a refused daemon execution with no attempts stays distinct from zero cost'
   expect(session.executions.refused).toBe(1)
   expect(session.completedAttempts).toBe(0)
   expect(session.requestsWithoutExecution).toBe(0)
-  expect(usageText(session).join('\n')).toContain('Execution outcomes: success 0, failure 0, refused 1, aborted 0; 0 summaries unknown; 0 requests had no daemon execution.')
-  expect(usageText(session).join('\n')).toContain('Estimated cost: unavailable (no observed attempts)')
+  expect(usageText(session).join('\n')).toContain('Runs: completed 0, failed 0, refused 1, stopped 0')
+  expect(usageText(session).join('\n')).toContain('Estimated cost: Not available. No provider calls have usage data. Run another request through Klyth.')
   const refusedBeforeDaemon = pendingFor('session-host-refusal', 1)
   let noExecution = reduceUsage(createUsageEnvelope('session-host-refusal', 1000), { type: 'begin', pending: refusedBeforeDaemon })
   noExecution = reduceUsage(noExecution, { type: 'settle', token: { id: refusedBeforeDaemon.requestId, sessionId: refusedBeforeDaemon.sessionId, generation: 1, sequence: 1 }, at: 2000 })
@@ -426,7 +426,7 @@ test('cold checkpoint recovery carries its warning and code reload interrupts ol
   expect(session?.unknownExecutions).toBe(1)
   expect(session?.pending).toEqual({})
   expect(session?.warnings.recovered).toBe(true)
-  expect(usageText(session!).join('\n')).toContain('Recovered checkpoint; an unsaved or interrupted tail may be missing.')
+  expect(usageText(session!).join('\n')).toContain('Klyth read a saved usage record. Recent requests may be missing.')
   first.observer.summary(request, { type: 'usage_summary', requestId: request, executionId, outcome: 'success', attempts: [{ sequence: 1, outcome: 'success', evidence: measurement(20, 10) }] })
   first.observer.settle(request, 'complete')
   await waitForTurns()
@@ -448,7 +448,7 @@ test('a checkpoint without the current session starts a fresh observation window
   expect(current?.logicalRequests).toBe(0)
   expect(current?.warnings.earlierUnavailable).toBe(true)
   expect(current?.warnings.recovered).toBe(false)
-  expect(usageText(current!).join('\n')).toContain('Observed since now; earlier usage is unavailable.')
+  expect(usageText(current!).join('\n')).toContain('This record excludes earlier usage. See Usage count start for the start time.')
 })
 
 test('future checkpoints and failed store writes remain visible without overwriting the stored value', async () => {
@@ -459,7 +459,7 @@ test('future checkpoints and failed store writes remain visible without overwrit
   await memoryOnly.start(corrupt.port)
   expect(corrupt.store.get('usage:v1')).toBe(future)
   expect(memoryOnly.snapshot()?.sessions[0]?.warnings.persistenceFailure).toBe(true)
-  expect(usageText(memoryOnly.snapshot()!.sessions[0]!).join('\n')).toContain('Checkpoint: Not saved')
+  expect(usageText(memoryOnly.snapshot()!.sessions[0]!).join('\n')).toContain('Klyth could not save usage.')
 
   const failed = fakePort()
   const life = createUsageLifetime()
@@ -469,7 +469,7 @@ test('future checkpoints and failed store writes remain visible without overwrit
   await life.end(failed.port)
   expect(life.snapshot()?.sessions[0]?.costUsd).toBe(0.00004)
   expect(life.snapshot()?.sessions[0]?.warnings.persistenceFailure).toBe(true)
-  expect(usageText(life.snapshot()!.sessions[0]!).join('\n')).toContain('Checkpoint: Not saved')
+  expect(usageText(life.snapshot()!.sessions[0]!).join('\n')).toContain('Klyth could not save usage.')
 })
 
 test('a blocked old CAS cannot overwrite a newer owner after its timeout', async () => {
@@ -561,8 +561,8 @@ test('real backend sends after owner replacement but the interrupted request sta
   const report = (await fresh.text(f.port)).join('\n')
   expect([sends, current.completedAttempts, current.unknownExecutions, current.requestsWithoutExecution, current.untrackedRequests]).toEqual([2, 1, 0, 0, 1])
   expect(current.warnings.trackingGap).toBe(true)
-  expect(report).toContain('Estimated cost: $0.00006 known + unpriced usage')
-  expect(report).toContain('Cost coverage: 1 / 1 completed observed attempts fully priceable')
+  expect(report).toContain('Estimated cost: At least $0.00006. Some usage data is missing. Open Session details.')
+  expect(report).toContain('Provider calls with complete cost estimates: 1 of 1')
   await fresh.end(f.port)
   for (const stop of stopDaemons) stop()
 })
@@ -582,11 +582,11 @@ test('usage text reads local totals and makes no additional provider request', a
   expect(await klyth($, 'usage text')).toEqual({})
   expect(w.requests).toHaveLength(requests)
   expect(w.runs.filter(argv => argv[0] === '/usr/bin/security')).toHaveLength(helperRuns)
-  expect(w.transcript.join('\n')).toContain('Klyth usage · This session')
-  expect(w.transcript.join('\n')).toContain('Logical requests: 2 (2 tracked, 0 untracked)')
-  expect(w.transcript.join('\n')).toContain('Usage coverage: 2 / 2 completed observed attempts')
+  expect(w.transcript.join('\n')).toContain('Klyth usage: routed work in this session')
+  expect(w.transcript.join('\n')).toContain('Requests with records: 2')
+  expect(w.transcript.join('\n')).toContain('Provider calls with input and output counts: 2 of 2')
   const before = w.transcript.length
   await klyth($, 'usage unexpected')
-  expect(w.transcript.slice(before)).toEqual(['klyth usage: use `/klyth usage` or `/klyth usage text`.'])
+  expect(w.transcript.slice(before)).toEqual(['Use `/klyth usage` or `/klyth usage text`.'])
   expect(w.requests).toHaveLength(requests)
 })
