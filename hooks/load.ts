@@ -1,7 +1,7 @@
-// Loading what styx runs on: styx.json in Claude Code's configuration directory (parsed, then checked against the managed policy), the
-// generated MCP schema table, and the styx agent tool's registration. Pure over a port: register.ts reads
+// Loading what klyth runs on: klyth.json in Claude Code's configuration directory (parsed, then checked against the managed policy), the
+// generated MCP schema table, and the klyth agent tool's registration. Pure over a port: register.ts reads
 // the files, the settings and the engine's version.
-import { userAgent } from './backend'
+import { PRODUCT, configPath } from './product'
 import { advert, agentSchema } from './advert'
 import { parseConfig } from './config'
 import type { Config, JsonSchema } from './config'
@@ -16,7 +16,7 @@ import type { Session } from './session'
 export type Loaded = { config?: Config; text?: string; errors: string[]; missing: boolean; declared?: readonly string[]; path: string }
 
 export type LoadPort = {
-  // Claude Code's configuration directory, where styx.json, plugins/installed_plugins.json and agents/ live.
+  // Claude Code's configuration directory, where klyth.json, plugins/installed_plugins.json and agents/ live.
   configDir(): Promise<string>
   home(): Promise<string>
   exists(path: string): Promise<boolean>
@@ -28,15 +28,15 @@ export type LoadPort = {
 export type ReloadPort = LoadPort & {
   pluginRoot: string
   version(): Promise<string | undefined>
-  entrypoint(): Promise<string | undefined>
-  // Registers the styx agent tool with its description and input schema.
+  // Registers the klyth agent tool with its description and input schema.
   registerAgentTool(description: string, inputSchema: JsonSchema): Promise<void>
   toast(text: string): void
+  hostWindow?(window: number | false | undefined): Promise<void>
 }
 
 // A policy allow-list or deny rule that excludes a provider's host, as config errors. Unreadable managed
-// settings are an error too: no provider host is checked against a policy styx could not read.
-async function policyErrors(io: Pick<LoadPort, 'policy'>, config: Config): Promise<string[]> {
+// settings are an error too: no provider host is checked against a policy klyth could not read.
+export async function providerPolicyErrors(io: Pick<LoadPort, 'policy'>, providers: readonly { id: string; origin: string }[]): Promise<string[]> {
   let policy: Readonly<Record<string, unknown>>
   try {
     policy = await io.policy()
@@ -50,7 +50,7 @@ async function policyErrors(io: Pick<LoadPort, 'policy'>, config: Config): Promi
   const covers = (host: string, d: unknown) => typeof d === 'string' && (d === host || (d.startsWith('*.') && host.endsWith(d.slice(1))))
   const denies = (host: string, r: unknown) => r === 'WebFetch' || (typeof r === 'string' && r.startsWith('WebFetch(domain:') && r.endsWith(')') && covers(host, r.slice('WebFetch(domain:'.length, -1)))
   const errors: string[] = []
-  for (const p of Object.values(config.providers)) {
+  for (const p of providers) {
     const host = new URL(p.origin).hostname
     if (Array.isArray(allowed) && !allowed.some(d => covers(host, d))) errors.push(`providers.${p.id}.baseUrl: ${host} is not in the managed policy's sandbox.network.allowedDomains`)
     if (Array.isArray(deny) && deny.some(r => denies(host, r))) errors.push(`providers.${p.id}.baseUrl: the managed policy denies WebFetch to ${host}`)
@@ -68,10 +68,10 @@ export function display(dir: string, home: string, file: string): string {
   return h !== '' && (d === h || d.startsWith(`${h}/`)) ? `~${d.slice(h.length)}/${file}` : `${d}/${file}`
 }
 
-async function loadConfig(io: LoadPort): Promise<Loaded> {
+export async function loadConfig(io: LoadPort): Promise<Loaded> {
   const dir = await io.configDir()
-  const full = `${bare(dir)}/styx.json`
-  const path = display(dir, await io.home(), 'styx.json')
+  const full = configPath(dir)
+  const path = display(dir, await io.home(), PRODUCT.config)
   if (!(await io.exists(full))) return { errors: [], missing: true, path }
   let text: string
   try {
@@ -81,7 +81,7 @@ async function loadConfig(io: LoadPort): Promise<Loaded> {
   }
   const parsed = parseConfig(text)
   if (parsed.config === undefined) return { errors: parsed.errors, missing: false, declared: declaredAliases(text), path }
-  const denied = await policyErrors(io, parsed.config)
+  const denied = await providerPolicyErrors(io, Object.values(parsed.config.providers))
   return denied.length > 0 ? { errors: denied, missing: false, declared: declaredAliases(text), path } : { config: parsed.config, text, errors: [], missing: false, path }
 }
 
@@ -99,12 +99,13 @@ async function loadMcpSchemas(io: Pick<ReloadPort, 'exists' | 'read' | 'pluginRo
 }
 
 // Re-reads the config and the MCP schema table, hands the config to the backend with no provider approved
-// yet (each is approved again at its next routed step), re-registers the styx agent tool, and toasts a
+// yet (each is approved again at its next routed step), re-registers the klyth agent tool, and toasts a
 // config error. A healthy load says nothing.
 export async function reload(io: ReloadPort, s: Session, backend: Pick<Backend, 'configure'>) {
   const loaded = await loadConfig(io)
   s.resetForReload()
   s.loaded = loaded
+  await io.hostWindow?.(loaded.config?.compaction?.hostWindow)
   await backend.configure({ configText: loaded.text ?? '{}', approved: [] })
   const mcp = await loadMcpSchemas(io)
   s.mcpSchemas = mcp.table
@@ -113,12 +114,16 @@ export async function reload(io: ReloadPort, s: Session, backend: Pick<Backend, 
   if (version !== undefined && version !== STAMP.engineVersion) {
     s.notes.push(`schemas: generated on ${STAMP.engineVersion} · engine ${version} · regenerate with bun scripts/gen-schemas.ts`)
   }
-  s.userAgent = userAgent(version, await io.entrypoint())
   const config = s.loaded.config
   if (config !== undefined) {
     s.goodAliases = Object.keys(config.aliases)
     await io.registerAgentTool(advert(config), agentSchema(config, SCHEMAS['Agent'] ?? {}))
   } else if (s.loaded.errors.length > 0) {
-    io.toast(`styx: routing off, config error: ${s.loaded.errors[0]}. Fix ${s.loaded.path}, then run /styx reload`)
+    io.toast(`klyth: routing off, config error: ${s.loaded.errors[0]}. Fix ${s.loaded.path}, then run /klyth reload`)
   }
+}
+
+// Claude Code's configuration directory, falling back to the user's home.
+export async function configDirectory(override: () => Promise<string | undefined>, home: () => Promise<string | undefined>): Promise<string> {
+  return (await override()) || `${(await home()) ?? ''}/.claude`
 }

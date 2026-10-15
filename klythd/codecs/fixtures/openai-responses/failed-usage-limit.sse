@@ -1,0 +1,9 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":1}
+
+event: response.failed
+data: {"type":"response.failed","response":{"id":"response-1","status":"failed","model":"model-x","error":{"code":"subscription_sharing_usage_limit_exceeded","message":"The usage limit for this app is reached."}},"sequence_number":2}
+

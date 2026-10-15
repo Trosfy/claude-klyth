@@ -1,0 +1,30 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"message-1","role":"assistant","status":"in_progress","content":[]},"sequence_number":2}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","item_id":"message-1","output_index":0,"content_index":0,"part":{"type":"output_text","text":""},"sequence_number":3}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"message-1","output_index":0,"content_index":0,"delta":"Writing it.","sequence_number":4}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","item_id":"message-1","output_index":0,"content_index":0,"text":"Writing it.","sequence_number":5}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","item_id":"message-1","output_index":0,"content_index":0,"part":{"type":"output_text","text":"Writing it."},"sequence_number":6}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"message-1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Writing it."}]},"sequence_number":7}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"function-1","call_id":"call-1","name":"Write","arguments":"","status":"in_progress"},"sequence_number":8}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","item_id":"function-1","output_index":1,"delta":"{\"file_path\":\"/a\",\"content\":\"par","sequence_number":9}
+

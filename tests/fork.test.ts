@@ -1,15 +1,13 @@
 // The history a routed fork is sent (hooks/fork.ts). Claude Code saves a fork of main as its own messages alone, so
-// styx rebuilds main's history up to the turn whose Agent call started the fork and joins the fork's own turns on:
+// klyth rebuilds main's history up to the turn whose Agent call started the fork and joins the fork's own turns on:
 // the cut, the joining turn's tool results, alternation, a read with or without the copied turn, a missing or extra
-// turn, a reload (routes and translated calls read from state), and every case it cannot rebuild, which fails closed.
+// turn, a reload (routes read from state), and every case it cannot rebuild, which fails closed.
 import { expect, test } from 'claude-code/testing'
 
 import type { Route } from '../types'
 import { alternate, forkHistory, seam, wellFormed } from '../hooks/fork'
 import type { ApiMessage } from '../hooks/protocol'
-import { WRAPPER } from '../hooks/routing'
 import { createSession } from '../hooks/session'
-import { withTranslated } from '../hooks/transcript'
 
 const EXTRA = ['REPORT']
 const u = (...content: Record<string, unknown>[]): ApiMessage => ({ role: 'user', content: content as unknown as ApiMessage['content'] })
@@ -36,7 +34,7 @@ const UNANSWERED = 'This call was made by the conversation that started the fork
 const FORK: Route = { target: 'fast', label: 'fast', type: 'fork', prompt: 'Find the code word.', forkOf: 'fork-call' }
 
 type Reads = Record<string, readonly ApiMessage[] | Error>
-function port(reads: Reads, o: { routes?: Record<string, Route>; translated?: Record<string, Record<string, string>> } = {}) {
+function port(reads: Reads, o: { routes?: Record<string, Route> } = {}) {
   const s = createSession()
   const io = {
     transcript: async (agentId: string | undefined) => {
@@ -45,10 +43,8 @@ function port(reads: Reads, o: { routes?: Record<string, Route>; translated?: Re
       return read ?? { deny: 'no such agent' }
     },
     route: async (id: string) => o.routes?.[id],
-    translated: async (who: string) => o.translated?.[who],
-    debug: () => {},
   }
-  return { s, io, history: (who: string, route: Route) => forkHistory(io, s, who, route, reads[who] as readonly ApiMessage[], WRAPPER, EXTRA) }
+  return { s, io, history: (who: string, route: Route) => forkHistory(io, s, who, route, reads[who] as readonly ApiMessage[], EXTRA) }
 }
 
 test("a fork of main whose read holds only its task gets main's history up to the turn that started it, then one user turn that answers each call of that turn", async () => {
@@ -84,16 +80,15 @@ test('a missing joining turn is made, an extra one is merged, and a result for a
   expect(wellFormed(sent)).toBe(true)
 })
 
-test("after a reload: main's styx agent calls are shown as main's own requests show them, and the fork's as its own, from state", async () => {
-  const translated = { main: { 'fork-call': 'fast' }, f1: { g1: 'strong' } }
+test("main's klyth agent calls and the fork's own stay as the engine read them, whatever the translated calls hold", async () => {
   const own = [u(text('Find the code word.')), a(use('g1')), u(result('g1'))]
-  const { history, s } = port({ main: MAIN, f1: own }, { translated })
-  expect(s.translated.size).toBe(0)
+  const { history, s } = port({ main: MAIN, f1: own })
+  s.translated.set('main', { 'fork-call': 'fast' })
+  s.translated.set('f1', { g1: 'strong' })
   const sent = (await history('f1', FORK)) ?? []
-  expect(sent.slice(0, 4)).toEqual(withTranslated(MAIN, translated.main, WRAPPER).slice(0, 4))
-  expect(sent[3]).toEqual(a(text('forking'), { ...use('fork-call', WRAPPER), input: { model: 'fast' } }, use('r1', 'Read')))
+  expect(sent.slice(0, 4)).toEqual(CUT)
+  expect(sent[5]).toEqual(a(use('g1')))
   expect(wellFormed(sent)).toBe(true)
-  expect(sent[5]).toEqual(a({ ...use('g1', WRAPPER), input: { model: 'strong' } }))
 })
 
 test('a fork of a subagent that is no fork is sent its read as it is, when that holds the turn that started it; else it is joined to the subagent\'s read', async () => {
@@ -105,18 +100,19 @@ test('a fork of a subagent that is no fork is sent its read as it is, when that 
   expect((await bare.history('f1', { ...FORK, parent: 'par' }))?.slice(0, 4)).toEqual(CUT)
 })
 
-test("a fork of a subagent that is no fork shows the subagent's styx agent calls as its own requests show them, and a parent read opening on an assistant turn gets the parent's task", async () => {
+test("a fork of a subagent that is no fork keeps the subagent's klyth agent calls as read, and a parent read opening on an assistant turn gets the parent's task", async () => {
   const sub = { par: { target: 'fast', label: 'fast', type: 'Explore', prompt: 'Audit' } as Route }
   const parentRead = MAIN.slice(1, 5)
   const own = [u(text('Find the code word.'))]
-  const translated = { par: { 'fork-call': 'fast' } }
-  const { history } = port({ par: parentRead, f1: own }, { routes: sub, translated })
+  const { history, s } = port({ par: parentRead, f1: own }, { routes: sub })
+  s.translated.set('par', { 'fork-call': 'fast' })
   const sent = (await history('f1', { ...FORK, parent: 'par' })) ?? []
   expect(sent[0]).toEqual(u(text('Audit')))
-  expect(sent[3]).toEqual(a(text('forking'), { ...use('fork-call', WRAPPER), input: { model: 'fast' } }, use('r1', 'Read')))
+  expect(sent[3]).toEqual(MAIN[3])
   expect(wellFormed(sent)).toBe(true)
-  const whole = port({ par: MAIN, f1: [...MAIN.slice(0, 4), u(result('fork-call'), result('r1'))] }, { routes: sub, translated })
-  expect(((await whole.history('f1', { ...FORK, parent: 'par' })) ?? [])[3]).toEqual(a(text('forking'), { ...use('fork-call', WRAPPER), input: { model: 'fast' } }, use('r1', 'Read')))
+  const whole = port({ par: MAIN, f1: [...MAIN.slice(0, 4), u(result('fork-call'), result('r1'))] }, { routes: sub })
+  whole.s.translated.set('par', { 'fork-call': 'fast' })
+  expect(((await whole.history('f1', { ...FORK, parent: 'par' })) ?? [])[3]).toEqual(MAIN[3])
 })
 
 test("a fork's joining turn answers a call beside the fork's from the parent's next turn, else says it is not available; the answer is frozen at the first step", async () => {

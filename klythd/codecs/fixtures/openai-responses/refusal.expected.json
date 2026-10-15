@@ -1,0 +1,18 @@
+[
+  {
+    "type": "text",
+    "text": "I can't help with that."
+  },
+  {
+    "type": "usage",
+    "in": 80,
+    "out": 9,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "reasoning": 0
+  },
+  {
+    "type": "stop",
+    "reason": "refusal"
+  }
+]

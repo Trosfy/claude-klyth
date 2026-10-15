@@ -1,0 +1,18 @@
+[
+  {
+    "type": "text",
+    "text": "The answer is"
+  },
+  {
+    "type": "usage",
+    "in": 80,
+    "out": 30,
+    "cacheRead": 20,
+    "cacheWrite": 0,
+    "reasoning": 0
+  },
+  {
+    "type": "stop",
+    "reason": "max_tokens"
+  }
+]

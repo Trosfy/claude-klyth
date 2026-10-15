@@ -1,11 +1,11 @@
 name: Bug report
-description: styx did something wrong or failed with an error.
+description: Klyth did something wrong or failed with an error.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Check [docs/TROUBLESHOOTING.md](https://github.com/Trosfy/claude-styx/blob/main/docs/TROUBLESHOOTING.md) first; most `styx:` lines are listed there.
+        Check [docs/TROUBLESHOOTING.md](https://github.com/Trosfy/claude-klyth/blob/main/docs/TROUBLESHOOTING.md) first; most `klyth:` lines are listed there.
         Never paste an API key, a key command's output, or a provider URL you want kept private.
   - type: textarea
     id: what
@@ -17,19 +17,19 @@ body:
   - type: textarea
     id: lines
     attributes:
-      label: styx lines
-      description: Any `styx:` lines Claude Code showed, and the `/styx` output, verbatim.
+      label: Klyth lines
+      description: Relevant `klyth:` lines and `/klyth` output. Redact private values, but keep diagnostic wording. Do not paste a full debug log.
       render: text
   - type: textarea
     id: config
     attributes:
       label: Config
-      description: The relevant part of `styx.json` (provider `kind`, model ids, alias), with keys and private URLs removed.
+      description: The relevant part of `klyth.json` (provider `kind`, model ids, alias), with keys and private URLs removed.
       render: json
   - type: input
     id: commit
     attributes:
-      label: styx commit
+      label: Klyth commit
       placeholder: git -C <your clone> rev-parse --short HEAD
     validations:
       required: true

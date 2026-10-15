@@ -1,0 +1,7 @@
+[
+  {
+    "type": "error",
+    "kind": "response",
+    "text": "klyth: p response failed: the stream ended inside a tool call; retry, or see the debug log"
+  }
+]

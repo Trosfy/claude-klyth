@@ -1,0 +1,33 @@
+[
+  {
+    "type": "text",
+    "text": "Checking both."
+  },
+  {
+    "type": "tool_use",
+    "id": "toolu_klyth_000000000000000000000001",
+    "name": "get_time",
+    "input": {
+      "tz": "Europe/London"
+    }
+  },
+  {
+    "type": "tool_use",
+    "id": "toolu_klyth_000000000000000000000002",
+    "name": "get_time",
+    "input": {
+      "tz": "UTC"
+    }
+  },
+  {
+    "type": "usage",
+    "in": 55,
+    "out": 40,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  {
+    "type": "stop",
+    "reason": "tool_use"
+  }
+]

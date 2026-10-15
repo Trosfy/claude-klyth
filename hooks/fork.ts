@@ -1,28 +1,29 @@
-// The messages a routed fork is sent. Natively a fork continues its parent's conversation: the parent's history up
-// to and including the assistant turn whose Agent call started the fork, then the fork's own turns. Claude Code saves
-// a fork of main as its own messages alone, with only a link to main, so the engine's read of such a fork lacks
-// main's history. styx rebuilds it from the parent's read, cut at the turn that holds the call recorded at the claim
-// (`Route.forkOf`), keeps the rebuilt prefix from the fork's first step (a later /compact of the parent does not
-// stop a running fork), and refuses to send a fork's request that it cannot rebuild or that does not hold together.
-// Pure over ports.
+// The messages a routed loop is sent (historyOf, asSent), and how a routed fork's are rebuilt. Natively a fork
+// continues its parent's conversation: the parent's history up to and including the assistant turn whose Agent call
+// started the fork, then the fork's own turns. Claude Code saves a fork of main as its own messages alone, with only a
+// link to main, so the engine's read of such a fork lacks main's history. klyth rebuilds it from the parent's read, cut
+// at the turn that holds the call recorded at the claim (`Route.forkOf`), keeps the rebuilt prefix from the fork's
+// first step (a later /compact of the parent does not stop a running fork), and refuses to send a fork's request that
+// it cannot rebuild or that does not hold together. Pure over ports.
 import type { Route } from '../types'
-import { isFork } from './agents'
+import { FORK_REPORT, HANDBACK_TOOL, isFork } from './agents'
+import type { Target } from './config'
+import { withIdentity } from './prompts'
 import type { ApiMessage } from './protocol'
-import type { RouteStore, Say, Transcripts } from './routing'
+import type { RouteStore, Transcripts } from './routing'
 import type { Session } from './session'
-import { translatedOf } from './spawn'
-import { blocksOf, str, withTask, withTranslated } from './transcript'
+import { blocksOf, str, withoutTool, withTask } from './transcript'
 
 type Block = ReturnType<typeof blocksOf>[number]
-export type ForkIo = Transcripts & Pick<RouteStore, 'route' | 'translated'> & Pick<Say, 'debug'>
+export type ForkIo = Transcripts & Pick<RouteStore, 'route'>
 
 // The line a fork's step fails with when its history cannot be rebuilt.
-export const FORK_HISTORY = "styx: this fork's inherited history could not be read, so the step was not sent; use another subagent_type than fork"
+export const FORK_HISTORY = "klyth: this fork's inherited history could not be read, so the step was not sent; use another subagent_type than fork"
 // What a rebuilt fork reads as the result of each call in the turn that started it, when its own read has none.
 const FORK_STARTED = 'The fork started and runs in the background.'
 // What it reads as the result of a call of that turn that is not the fork's own, when the parent's next turn has none.
 const FORK_UNANSWERED = 'This call was made by the conversation that started the fork; its result is not available to the fork.'
-// How far up a chain of forks styx follows parents: further is taken as a loop.
+// How far up a chain of forks klyth follows parents: further is taken as a loop.
 const FORK_DEPTH = 16
 
 const isResult = (b: Block) => b.type === 'tool_result'
@@ -92,8 +93,8 @@ export function seam(cut: ApiMessage, after: ApiMessage | undefined, tail: reado
   return [opened, ...(first?.role === 'user' ? rest : tail)]
 }
 
-// The history a routed fork (`who`, on `route`) is sent, from its own read `own`, each conversation's styx agent
-// calls shown as its own requests show them; undefined when it cannot be rebuilt whole, which fails the step.
+// The history a routed fork (`who`, on `route`) is sent, from its own read `own`; undefined when it cannot be
+// rebuilt whole, which fails the step.
 // - A fork of a subagent that is not a fork: the engine's read of it holds the inherited history and the turn that
 //   started it, so it is sent as read, its joining turn closed by `extra`.
 // - A fork of main or of another fork: its parent's history (main's read, or the parent fork's rebuilt history) up to
@@ -104,18 +105,15 @@ export function seam(cut: ApiMessage, after: ApiMessage | undefined, tail: reado
 // Every fork is told there how it reports (FORK_REPORT), so its system prompt is its parent's, composed for the tools
 // it is offered. A route with no `forkOf`, a parent route or read that cannot be had, a parent history without the
 // turn, and a result that is not well formed are all undefined (nothing is kept then).
-export async function forkHistory(io: ForkIo, s: Session, who: string, route: Route, own: readonly ApiMessage[], wrapper: string, extra: readonly string[], depth = 0): Promise<readonly ApiMessage[] | undefined> {
+export async function forkHistory(io: ForkIo, s: Session, who: string, route: Route, own: readonly ApiMessage[], extra: readonly string[], depth = 0): Promise<readonly ApiMessage[] | undefined> {
   const at = route.forkOf
   if (at === undefined || depth > FORK_DEPTH) return undefined
   const parent = route.parent === undefined ? undefined : (s.routes.get(route.parent) ?? (await io.route(route.parent).catch(() => undefined)))
   if (route.parent !== undefined && parent === undefined) return undefined
-  // A fork of a subagent that is not a fork carries that subagent's own styx agent calls too.
   const inherits = parent !== undefined && !isFork(parent.type)
-  const translated = { ...(inherits ? await translatedOf(io, s, route.parent as string) : {}), ...(await translatedOf(io, s, who)) }
-  const mine = withTranslated(own, translated, wrapper)
-  const ownCut = holding(mine, at)
+  const ownCut = holding(own, at)
   if (inherits && ownCut >= 0) {
-    const whole = alternate([...mine.slice(0, ownCut + 1), ...seam(mine[ownCut] as ApiMessage, undefined, mine.slice(ownCut + 1), route.prompt, extra, at)])
+    const whole = alternate([...own.slice(0, ownCut + 1), ...seam(own[ownCut] as ApiMessage, undefined, own.slice(ownCut + 1), route.prompt, extra, at)])
     return wellFormed(whole) ? whole : undefined
   }
   const kept = s.forkPrefixes.get(who)
@@ -126,15 +124,27 @@ export async function forkHistory(io: ForkIo, s: Session, who: string, route: Ro
     if (!Array.isArray(read)) return undefined
     above =
       parent !== undefined && isFork(parent.type)
-        ? await forkHistory(io, s, route.parent as string, parent, read, wrapper, extra, depth + 1)
-        : withTranslated(inherits ? withTask(read, parent?.prompt) : read, await translatedOf(io, s, route.parent ?? 'main'), wrapper)
+        ? await forkHistory(io, s, route.parent as string, parent, read, extra, depth + 1)
+        : inherits ? withTask(read, parent?.prompt) : read
     cut = above === undefined ? -1 : holding(above, at)
   }
   if (above === undefined || cut < 0) return undefined
   const after = above[cut + 1]
-  const joined = alternate([...above.slice(0, cut + 1), ...seam(above[cut] as ApiMessage, after, ownCut >= 0 ? mine.slice(ownCut + 1) : mine, route.prompt, extra, at)])
+  const joined = alternate([...above.slice(0, cut + 1), ...seam(above[cut] as ApiMessage, after, ownCut >= 0 ? own.slice(ownCut + 1) : own, route.prompt, extra, at)])
   if (!wellFormed(joined)) return undefined
   // Only the fork itself keeps a prefix; a parent fork rebuilt on its behalf does not.
   if (kept === undefined && depth === 0) s.forkPrefixes.set(who, { messages: above.slice(0, cut + 2), cut })
   return joined
 }
+
+// The history a routed loop (main, or the subagent `agentId` on `route`) is sent, from its read `read`: a fork's
+// rebuilt as above and told there how it reports; any other loop's as read, a subagent's opening on its task.
+// Undefined when a fork's cannot be rebuilt.
+export async function historyOf(io: ForkIo, s: Session, agentId: string | undefined, route: Route | undefined, read: readonly ApiMessage[]): Promise<readonly ApiMessage[] | undefined> {
+  if (route !== undefined && isFork(route.type)) return forkHistory(io, s, agentId ?? 'main', route, read, [FORK_REPORT])
+  return agentId === undefined ? read : withTask(read, route?.prompt)
+}
+
+// A history as a request to `t` carries it: Claude Code's line naming the model it runs on names `t`'s model, and a
+// model offered no tools is sent no SubagentHandback call.
+export const asSent = (history: readonly ApiMessage[], t: Extract<Target, { kind: 'remote' }>) => withIdentity(t.model.tools ? history : withoutTool(history, HANDBACK_TOOL.name), t.model.id, t.provider.id)

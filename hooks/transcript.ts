@@ -1,7 +1,7 @@
 // Reading the engine's transcript where routing needs it: the first user text, a subagent's opening task,
-// whether the engine delivers its report through SubagentHandback or has refused a call of it, and the styx agent calls the engine ran as Agent calls; the
-// text of a value, and a message's blocks, which styxd reads the transcript by too. Pure.
-import { isObject, own } from './config'
+// whether the engine delivers its report through SubagentHandback or has refused a call of it; the
+// text of a value, and a message's blocks, which klythd reads the transcript by too. Pure.
+import { isObject } from './config'
 import type { ApiMessage } from './protocol'
 
 type Block = { type: string } & Record<string, unknown>
@@ -22,7 +22,7 @@ export function firstUserText(messages: readonly ApiMessage[]): string {
 
 // A subagent's transcript, opening on a user turn. The engine's read of an agent is the transcript the
 // session saved for it plus what its loop has produced since, so where no transcript is saved (a session
-// run without persistence) it holds no opening user turn; `task`, the prompt styx gave the spawn, then
+// run without persistence) it holds no opening user turn; `task`, the prompt klyth gave the spawn, then
 // opens the transcript. A transcript the engine opens on a user turn (the task as the engine started the
 // agent with it, whatever another hook made of it, or a compaction summary) is returned as is.
 export function withTask(messages: readonly ApiMessage[], task: string | undefined): readonly ApiMessage[] {
@@ -54,7 +54,7 @@ export function handbackState(messages: readonly ApiMessage[], name: string): 'o
 }
 const isSaying = (text: string, name: string) => text.startsWith(`<system-reminder>\nYour final report is delivered through ${name}`) || text.startsWith('[handback-send-enforce]')
 
-// A transcript without styx's own calls of the tool `name`, for a model offered no tool: each such call and its result is
+// A transcript without klyth's own calls of the tool `name`, for a model offered no tool: each such call and its result is
 // dropped. An assistant turn left with no text says what its calls carried, as text; a user turn left with no block says
 // what the engine answered, as text, so the request still ends on a user turn and a refusal is not lost (it is joined to
 // the user turn after it). The same array when nothing changed.
@@ -104,26 +104,5 @@ export function withoutTool(messages: readonly ApiMessage[], name: string): read
       push(turn)
     }
   }
-  return changed ? out : messages
-}
-
-// A transcript as the model that made its styx agent calls reads it: each Agent call in `translated` (tool_use
-// id → the model the call named) is the call as the model made it, under the name `wrapper` with its `model`.
-export function withTranslated(messages: readonly ApiMessage[], translated: Readonly<Record<string, string>>, wrapper: string): readonly ApiMessage[] {
-  if (Object.keys(translated).length === 0) return messages
-  let changed = false
-  const out = messages.map(m => {
-    if (m.role !== 'assistant' || typeof m.content === 'string') return m
-    let hit = false
-    const content = m.content.map(b => {
-      const model = b.type === 'tool_use' && b['name'] === 'Agent' ? own(translated, str(b['id'])) : undefined
-      if (model === undefined) return b
-      hit = true
-      return { ...b, name: wrapper, input: { ...(isObject(b['input']) ? b['input'] : {}), model } }
-    })
-    if (!hit) return m
-    changed = true
-    return { ...m, content }
-  })
   return changed ? out : messages
 }

@@ -1,0 +1,11 @@
+[
+  {
+    "type": "text",
+    "text": "Fine so far, "
+  },
+  {
+    "type": "error",
+    "kind": "response",
+    "text": "klyth: p response failed: event-stream message CRC mismatch; retry, or see the debug log"
+  }
+]

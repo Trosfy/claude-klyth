@@ -27,15 +27,15 @@ export async function findTrash(io: Pick<WorktreePort, 'run'>): Promise<string |
 export async function makeWorktree(io: WorktreePort): Promise<Worktree | { error: string }> {
   const cwd = await io.cwd()
   const top = await git(io, ['-C', cwd, 'rev-parse', '--show-toplevel'])
-  if (top.exitCode !== 0) return { error: `styx agent: isolation "worktree" needs a git work tree, and ${cwd} is not inside one; omit isolation` }
+  if (top.exitCode !== 0) return { error: `klyth agent: isolation "worktree" needs a git work tree, and ${cwd} is not inside one; omit isolation` }
   const root = top.stdout.trim()
   const head = await git(io, ['-C', root, 'rev-parse', '--verify', 'HEAD'])
-  if (head.exitCode !== 0) return { error: `styx agent: isolation "worktree" needs a commit to start from, and ${root} has none; make a commit or omit isolation` }
+  if (head.exitCode !== 0) return { error: `klyth agent: isolation "worktree" needs a commit to start from, and ${root} has none; make a commit or omit isolation` }
   const short = crypto.randomUUID().replaceAll('-', '').slice(0, 8)
   const wt: Worktree = { path: `${root}/.claude/worktrees/agent-${short}`, branch: `worktree-agent-${short}`, base: head.stdout.trim(), root }
   const add = await git(io, ['-C', root, 'worktree', 'add', '-b', wt.branch, wt.path, wt.base])
-  if (add.exitCode !== 0) return { error: `styx agent: git worktree add failed: ${firstLine(add.stderr)}; fix the repository or omit isolation` }
-  io.debug(`styx worktree ${wt.path} (branch ${wt.branch}) from ${wt.base.slice(0, 12)}`)
+  if (add.exitCode !== 0) return { error: `klyth agent: git worktree add failed: ${firstLine(add.stderr)}; fix the repository or omit isolation` }
+  io.debug(`klyth worktree ${wt.path} (branch ${wt.branch}) from ${wt.base.slice(0, 12)}`)
   return wt
 }
 
@@ -58,9 +58,9 @@ export async function engineWorktree(io: Pick<WorktreePort, 'run' | 'cwd'> & { e
 // are kept and said so: `git worktree remove` would delete its git-ignored files for good.
 export async function settleWorktree(io: WorktreePort, trashPath: string | undefined, wt: Worktree, who: string): Promise<'removed' | 'kept'> {
   const keep = (why: string) => {
-    const text = `styx: kept worktree ${wt.path} (branch ${wt.branch}) of subagent ${who}: ${why}; merge ${wt.branch} or remove the worktree`
+    const text = `kept worktree ${wt.path} (branch ${wt.branch}) of subagent ${who}: ${why}; merge ${wt.branch} or remove the worktree`
     io.log(text)
-    io.toast(text)
+    io.toast(`klyth: ${text}`)
     return 'kept' as const
   }
   const status = await git(io, ['-C', wt.path, 'status', '--porcelain'])
@@ -72,6 +72,6 @@ export async function settleWorktree(io: WorktreePort, trashPath: string | undef
   if (moved.exitCode !== 0) return keep(`trash failed (${firstLine(moved.stderr)})`)
   await git(io, ['-C', wt.root, 'worktree', 'prune'])
   const branch = await git(io, ['-C', wt.root, 'branch', '-d', wt.branch])
-  io.debug(`styx worktree ${wt.path} moved to the Trash; branch ${wt.branch} ${branch.exitCode === 0 ? 'deleted' : `kept (${firstLine(branch.stderr)})`}`)
+  io.debug(`klyth worktree ${wt.path} moved to the Trash; branch ${wt.branch} ${branch.exitCode === 0 ? 'deleted' : `kept (${firstLine(branch.stderr)})`}`)
   return 'removed'
 }

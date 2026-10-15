@@ -1,6 +1,6 @@
 // The system prompt of a routed step, and the model identity its transcript states. Main gets the prompt
 // the engine composes for its own model, with the lines that name that model rewritten to name the routed
-// model and provider. A built-in agent type gets the prompt styx writes for it (hooks/agents.ts); the `claude`
+// model and provider. A built-in agent type gets the prompt klyth writes for it (hooks/agents.ts); the `claude`
 // type, which natively runs on main's own prompt, gets main's rewritten prompt; a custom agent type, or a
 // built-in one with exactly one agent file naming it, gets the body of that file, and a custom one whose
 // definition does not read runs as general-purpose.
@@ -34,13 +34,13 @@ export type PromptsPort = {
 const AGENT_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/
 const INHERIT = 'inherit'
 
-// Says `text` once per session (a reload says it again): in /styx, and in the debug log. Its key is apart
+// Says `text` once per session (a reload says it again): in /klyth, and in the debug log. Its key is apart
 // from the ones definitionOf logs under (`def <type>`).
 function noteOnce(io: Pick<PromptsPort, 'debug'>, s: Session, key: string, text: string) {
   if (s.agentNotes.has(`note ${key}`)) return
   s.agentNotes.add(`note ${key}`)
   s.notes.push(text)
-  io.debug(`styx ${text}`)
+  io.debug(`klyth ${text}`)
 }
 
 // --- model identity ------------------------------------------------------------------------------------------
@@ -144,7 +144,7 @@ async function agentDirs(io: PromptsPort, s: Session, type: string): Promise<Par
 // `description`, takes no agent from a file without either, and passes over a file with no frontmatter. A plugin's
 // agent file needs neither field: its name falls back to the file name and its description to a default.
 type AgentFile = { path: string; name: string; def: Parsed<AgentDef>; skipped?: string }
-// How many entries styx lists in one agents directory and beneath it: a directory with more is one it cannot be
+// How many entries klyth lists in one agents directory and beneath it: a directory with more is one it cannot be
 // sure to have read whole.
 const AGENT_DIR_MAX = 128
 
@@ -181,7 +181,7 @@ async function loadAgentDir(io: PromptsPort, s: Session, dir: string, plugin: bo
         const missing = plugin || 'error' in def ? [] : (['name', 'description'] as const).filter(k => !def[k])
         const bare = !plugin && 'error' in def && def.error === NO_FRONTMATTER
         const skipped = bare ? 'no frontmatter' : missing.length === 0 ? undefined : `no ${missing.join(' or ')}`
-        if (skipped !== undefined && !bare) noteOnce(io, s, `skipped ${path}`, `agents: ${path} has ${skipped}, which Claude Code requires of a file in .claude/agents, so it skips the file and so does styx`)
+        if (skipped !== undefined && !bare) noteOnce(io, s, `skipped ${path}`, `agents: ${path} has ${skipped}, which Claude Code requires of a file in .claude/agents, so it skips the file and so does klyth`)
         return { path, name: ('error' in def ? undefined : def.name) || path.slice(path.lastIndexOf('/') + 1, -3), def, ...(skipped === undefined ? {} : { skipped }) }
       }),
     )
@@ -191,8 +191,8 @@ async function loadAgentDir(io: PromptsPort, s: Session, dir: string, plugin: bo
 }
 
 // The agent files that name `type` (as its frontmatter `name`, whatever the file is called), in Claude Code's
-// order of preference, the files among the others that styx could not read (any of them may define `type`
-// under a name styx cannot see), and the directories they were looked for in.
+// order of preference, the files among the others that klyth could not read (any of them may define `type`
+// under a name klyth cannot see), and the directories they were looked for in.
 async function definingFiles(io: PromptsPort, s: Session, type: string): Promise<Parsed<{ name: string; dirs: string[]; files: AgentFile[]; unread: AgentFile[] }>> {
   const found = await agentDirs(io, s, type)
   if ('error' in found) return found
@@ -218,9 +218,9 @@ async function findDefinition(io: PromptsPort, s: Session, type: string): Promis
   return 'error' in first.def ? { error: `${first.path}: ${first.def.error}` } : { def: first.def, path: first.path }
 }
 
-// Whether Claude Code may define `type` from other than the one file styx reads, as far as styx can see: a type
-// that more than one file names (it picks by a precedence styx does not follow). A file whose text does not read
-// counts under its file name, since styx cannot tell it is not the definition; an agent that no file shows (an
+// Whether Claude Code may define `type` from other than the one file klyth reads, as far as klyth can see: a type
+// that more than one file names (it picks by a precedence klyth does not follow). A file whose text does not read
+// counts under its file name, since klyth cannot tell it is not the definition; an agent that no file shows (an
 // `--agents` or SDK one) is not seen.
 export async function contested(io: PromptsPort, s: Session, type: string): Promise<boolean> {
   try {
@@ -236,9 +236,9 @@ const MAIN_PROMPT_TYPE = 'claude'
 
 // A routed subagent's own definition when an agent file names its type and the definition reads, else
 // undefined. Each type's outcome is logged once; a custom type whose definition does not read is also said in
-// /styx, as it runs as general-purpose. A built-in type with no file, or with more than one, has no definition
-// and says nothing: it runs on styx's own prompt. A built-in type with one file that reads says in /styx that it
-// runs on that file; a file that does not read, and so may define one under a name styx cannot see, is said too. A
+// /klyth, as it runs as general-purpose. A built-in type with no file, or with more than one, has no definition
+// and says nothing: it runs on klyth's own prompt. A built-in type with one file that reads says in /klyth that it
+// runs on that file; a file that does not read, and so may define one under a name klyth cannot see, is said too. A
 // fork has no definition of its own: it runs on its parent's prompt.
 export async function definitionOf(io: PromptsPort, s: Session, type: string | undefined): Promise<AgentDef | undefined> {
   if (type === undefined || isFork(type)) return undefined
@@ -249,7 +249,7 @@ export async function definitionOf(io: PromptsPort, s: Session, type: string | u
       const named = await definingFiles(io, s, type)
       if ('error' in named) return undefined
       for (const f of named.unread) {
-        noteOnce(io, s, `unread ${f.path}`, `agents: ${f.path} cannot be read (${(f.def as { error: string }).error}); if it defines a built-in agent type, that type runs on styx's prompt instead of the file`)
+        noteOnce(io, s, `unread ${f.path}`, `agents: ${f.path} cannot be read (${(f.def as { error: string }).error}); if it defines a built-in agent type, that type runs on klyth's prompt instead of the file`)
       }
       if (named.files.length !== 1) return undefined
       single = true
@@ -265,65 +265,65 @@ export async function definitionOf(io: PromptsPort, s: Session, type: string | u
   }
   if (!s.agentNotes.has(`def ${type}`)) {
     s.agentNotes.add(`def ${type}`)
-    io.debug('error' in found ? `styx agent-def ${type}: ${found.error}` : `styx agent-def ${type} from ${found.path}`)
-    const unreadable = `agents: ${type} has ${single ? 'one agent file styx cannot read' : 'no readable definition'}`
-    if ('error' in found) s.notes.push(single ? `${unreadable} (${found.error}); a plain call stays native and a styx agent call is refused` : `${unreadable} (${found.error}); it runs ${builtin ? `on ${type === MAIN_PROMPT_TYPE ? "main's" : "styx's"} prompt` : 'as general-purpose'}`)
+    io.debug('error' in found ? `klyth agent-def ${type}: ${found.error}` : `klyth agent-def ${type} from ${found.path}`)
+    const unreadable = `agents: ${type} has ${single ? 'one agent file klyth cannot read' : 'no readable definition'}`
+    if ('error' in found) s.notes.push(single ? `${unreadable} (${found.error}); a plain call stays native and a klyth agent call is refused` : `${unreadable} (${found.error}); it runs ${builtin ? `on ${type === MAIN_PROMPT_TYPE ? "main's" : "klyth's"} prompt` : 'as general-purpose'}`)
     else if (builtin) s.notes.push(`agents: ${type} runs on ${found.path}, which overrides the built-in`)
   }
   return 'error' in found ? undefined : found.def
 }
 
-// Whether styx may run an agent type on a styx route, and whether its definition isolates it; else why not. Every
-// route to a subagent on a styx model asks this, the plain Agent call under a routed parent (inherit.ts) and the
-// styx agent tool alike, so the same call is answered the same from any conversation.
-// A type styx cannot run itself (NOT_REPRODUCED) qualifies never. A fork qualifies always: it runs on its parent's
+// Whether klyth may run an agent type on a klyth route, and whether its definition isolates it; else why not. Every
+// route to a subagent on a klyth model asks this, the plain Agent call under a routed parent (inherit.ts) and the
+// klyth agent tool alike, so the same call is answered the same from any conversation.
+// A type klyth cannot run itself (NOT_REPRODUCED) qualifies never. A fork qualifies always: it runs on its parent's
 // prompt, and no agent file defines it. Any other built-in type qualifies when it inherits its parent's model:
-// styx writes its prompt, or uses the one agent file that names it (`name: Explore`), whose model:, isolation: and
-// tools then apply as a custom type's do. A custom type qualifies when its definition is one styx reads and names
+// klyth writes its prompt, or uses the one agent file that names it (`name: Explore`), whose model:, isolation: and
+// tools then apply as a custom type's do. A custom type qualifies when its definition is one klyth reads and names
 // no model of its own. A custom type without a readable definition (a plugin loaded with --plugin-dir, an
-// --agents or SDK agent, no agent file whose `name:` is the type) is left native, because styx would answer it with
-// the general-purpose prompt and tools; so is a built-in type whose one agent file styx cannot read, and a type that more than one agent file names (`contested`).
+// --agents or SDK agent, no agent file whose `name:` is the type) is left native, because klyth would answer it with
+// the general-purpose prompt and tools; so is a built-in type whose one agent file klyth cannot read, and a type that more than one agent file names (`contested`).
 // These back-offs keep a spawn the caller did not ask a model for native. `named` is a spawn whose caller named
-// the styx model (a styx agent call): it starts on the parent's model whatever the definition says, so a type's
+// the klyth model (a klyth agent call): it starts on the parent's model whatever the definition says, so a type's
 // own model and missing definition do not stop it.
 // `fate` ends the debug line that says why.
 export async function claimable(io: PromptsPort, s: Session, type: string, fate: string, named: boolean): Promise<{ isolated: boolean } | { no: string }> {
   if (isFork(type)) return { isolated: false }
   if (NOT_REPRODUCED.includes(type)) {
-    io.debug(`styx inherit: ${type} is not a type styx can run; ${fate}`)
-    return { no: 'is not a type styx can run' }
+    io.debug(`klyth inherit: ${type} is not a type klyth can run; ${fate}`)
+    return { no: 'is not a type klyth can run' }
   }
   const builtin = BUILTIN_AGENTS.includes(type)
   const def = await definitionOf(io, s, type)
-  // A built-in type that exactly one agent file names, and styx cannot read, may be defined by that file: not claimable.
+  // A built-in type that exactly one agent file names, and klyth cannot read, may be defined by that file: not claimable.
   const files = builtin && def === undefined ? await definingFiles(io, s, type).catch(() => undefined) : undefined
   if (files !== undefined && !('error' in files) && files.files.length === 1 && 'error' in (files.files[0] as AgentFile).def) {
-    io.debug(`styx inherit: ${type} has one agent file styx cannot read; ${fate}`)
-    return { no: 'has one agent file styx cannot read' }
+    io.debug(`klyth inherit: ${type} has one agent file klyth cannot read; ${fate}`)
+    return { no: 'has one agent file klyth cannot read' }
   }
   if (!builtin && def === undefined && !named) {
-    io.debug(`styx inherit: ${type} has no readable definition; ${fate}`)
+    io.debug(`klyth inherit: ${type} has no readable definition; ${fate}`)
     return { no: 'has no readable definition' }
   }
   const model = def?.model ?? (builtin && def === undefined ? own(BUILTIN_MODELS, type) : undefined)
   if (!named && model !== undefined && model.trim().toLowerCase() !== INHERIT) return { no: 'names a model of its own' }
   // A named spawn of a custom type with no definition runs general-purpose whatever files name it.
   if (!(named && !builtin && def === undefined) && (await contested(io, s, type))) {
-    io.debug(`styx inherit: ${type} has more than one definition (two agent files name it, or styx could not read them all); ${fate}`)
+    io.debug(`klyth inherit: ${type} has more than one definition (two agent files name it, or klyth could not read them all); ${fate}`)
     return { no: 'has more than one definition' }
   }
   if (def?.isolation !== undefined && def.isolation !== 'worktree') {
-    io.debug(`styx inherit: ${type} runs isolated as ${def.isolation}; ${fate}`)
+    io.debug(`klyth inherit: ${type} runs isolated as ${def.isolation}; ${fate}`)
     return { no: `runs isolated as ${def.isolation}` }
   }
   return { isolated: def?.isolation === 'worktree' }
 }
 
-// The agent type a styx agent call's `subagent_type` names, resolved as the engine resolves an Agent call's, for
-// the styx agent tool's own spawn: `$.agent.spawn` takes a type only as exactly spelled, and every check and the
+// The agent type a klyth agent call's `subagent_type` names, resolved as the engine resolves an Agent call's, for
+// the klyth agent tool's own spawn: `$.agent.spawn` takes a type only as exactly spelled, and every check and the
 // route must use the type the engine runs. None is general-purpose. A type spelled exactly as a built-in type or
 // an agent file's name is itself; another spelling is the one known type it matches ignoring case, and a spelling
-// that matches more than one is denied with them listed. A plugin agent, and a type styx knows of no file for (an
+// that matches more than one is denied with them listed. A plugin agent, and a type klyth knows of no file for (an
 // `--agents` or SDK agent), are passed on as they are, and the engine refuses a name that matches none.
 export async function resolveType(io: PromptsPort, s: Session, type: string | undefined): Promise<{ type: string } | { deny: string }> {
   if (type === undefined || type === '') return { type: 'general-purpose' }
@@ -336,7 +336,7 @@ export async function resolveType(io: PromptsPort, s: Session, type: string | un
   if (known.has(type)) return { type }
   const fold = (t: string) => t.normalize('NFKC').toLowerCase()
   const matches = [...known].filter(k => fold(k) === fold(type)).sort()
-  if (matches.length > 1) return { deny: `styx agent: subagent_type ${JSON.stringify(type)} matches more than one agent type (${matches.join(', ')}); name one of them exactly` }
+  if (matches.length > 1) return { deny: `klyth agent: subagent_type ${JSON.stringify(type)} matches more than one agent type (${matches.join(', ')}); name one of them exactly` }
   return { type: matches[0] ?? type }
 }
 
@@ -361,7 +361,7 @@ type SystemInput = { def?: AgentDef; route?: Route; fork?: boolean; engineModel:
 // A routed step's system prompt and where it came from: `main` (the composed prompt, identity rewritten: main's
 // own, and a `claude` subagent's when no agent file names it; one in a worktree is not told the session's
 // directory), `custom` (an agent file's body: a custom type's, or a built-in type's that one file names) or
-// `styx` (the prompt styx writes for a built-in type). A subagent's prompt is completed by agentSystem. A fork's is
+// `klyth` (the prompt klyth writes for a built-in type). A subagent's prompt is completed by agentSystem. A fork's is
 // its parent's, as `fork of <source>`: a fork of main gets main's prompt alone, and a fork of a subagent that
 // subagent's prompt less the handback guidance. Every fork is told how it reports in its messages (fork.ts), and
 // Claude Code offers a fork no SubagentHandback, so no fork is told of it.
@@ -378,7 +378,7 @@ export async function systemFor(io: PromptsPort, s: Session, i: SystemInput): Pr
       ? { body: i.def.prompt, source: 'custom', notes: BUILTIN_NOTES }
       : type === MAIN_PROMPT_TYPE
         ? { body: await fromMain(i.route.worktree !== undefined), source: 'main', notes: BUILTIN_NOTES }
-        : { body: builtinPrompt(BUILTIN_AGENTS.includes(type) ? type : 'general-purpose', new Set(i.tools)), source: 'styx', notes: BUILTIN_NOTES }
+        : { body: builtinPrompt(BUILTIN_AGENTS.includes(type) ? type : 'general-purpose', new Set(i.tools)), source: 'klyth', notes: BUILTIN_NOTES }
   const text = agentSystem(prompt.body, {
     cwd: i.route.worktree?.path ?? (await io.cwd()),
     platform: await platformOf(io, s),

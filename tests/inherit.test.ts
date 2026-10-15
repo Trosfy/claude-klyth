@@ -1,4 +1,4 @@
-// A plain Agent call under a routed main: which spawns styx claims for the parent's route, seen through the
+// A plain Agent call under a routed main: which spawns klyth claims for the parent's route, seen through the
 // spawn barrier. A claimed spawn holds its subagent's first step until the spawn settles; any other passes
 // untouched and holds nothing. The kit hands a spawn no agentId (the host keeps that field for a spawn core
 // started), so no route is written here: the harness (tests/harness/post-spawn.ts) follows a claimed spawn on
@@ -6,7 +6,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { HOME, model, start, step, styx, world } from './world'
+import { HOME, model, start, step, klyth, world } from './world'
 import type { WorldOptions } from './world'
 
 const AGENT = (model: string | undefined) => `---\nname: scout\ndescription: d\n${model === undefined ? '' : `model: ${model}\n`}---\nSCOUT BODY`
@@ -45,7 +45,7 @@ for (const [why, o, input, routed] of [
     release()
     await pending
     expect(w.spawns).toHaveLength(1)
-    expect(w.debug.some(l => l.startsWith('styx spawn-wait') || l.startsWith('styx inherit'))).toBe(false)
+    expect(w.debug.some(l => l.startsWith('klyth spawn-wait') || l.startsWith('klyth inherit'))).toBe(false)
   })
 }
 
@@ -57,22 +57,22 @@ for (const [why, o, input] of [
 ] as const) {
   test(`main is routed and ${why}: its first step waits for the spawn to settle`, async ($, on) => {
     const { w, early, release, pending } = await held($, on, o, input)
-    expect(w.debug.some(l => l.startsWith('styx spawn-wait'))).toBe(false)
+    expect(w.debug.some(l => l.startsWith('klyth spawn-wait'))).toBe(false)
     release()
     expect((await early).result.answer).toBe('native')
-    expect(w.debug).toContain('styx spawn-wait c1 outcome=settled routed=false')
+    expect(w.debug).toContain('klyth spawn-wait c1 outcome=settled routed=false')
     await pending
   })
 }
 
-test('main is routed and the type is one styx cannot run (comment-thread-analyst): the spawn passes untouched, holds no step, and one debug line says so', async ($, on) => {
+test('main is routed and the type is one klyth cannot run (comment-thread-analyst): the spawn passes untouched, holds no step, and one debug line says so', async ($, on) => {
   const { w, early, release, pending } = await held($, on, {}, { subagentType: 'comment-thread-analyst' })
   expect((await early).result.answer).toBe('native')
   release()
   await pending
   expect(w.spawns).toHaveLength(1)
-  expect(w.debug.some(l => l.startsWith('styx spawn-wait'))).toBe(false)
-  expect(w.debug.filter(l => l.startsWith('styx inherit'))).toEqual(['styx inherit: comment-thread-analyst is not a type styx can run; it stays native'])
+  expect(w.debug.some(l => l.startsWith('klyth spawn-wait'))).toBe(false)
+  expect(w.debug.filter(l => l.startsWith('klyth inherit'))).toEqual(['klyth inherit: comment-thread-analyst is not a type klyth can run; it stays native'])
 })
 
 test('main is routed and Explore has no agent file: the spawn is claimed, and nothing is said', async ($, on) => {
@@ -80,8 +80,8 @@ test('main is routed and Explore has no agent file: the spawn is claimed, and no
   release()
   expect((await early).result.answer).toBe('native')
   await pending
-  expect(w.debug).toContain('styx spawn-wait c1 outcome=settled routed=false')
-  expect(w.debug.filter(l => /^styx (inherit: Explore (has|is|names|runs)|agent-def)/.test(l))).toEqual([])
+  expect(w.debug).toContain('klyth spawn-wait c1 outcome=settled routed=false')
+  expect(w.debug.filter(l => /^klyth (inherit: Explore (has|is|names|runs)|agent-def)/.test(l))).toEqual([])
 })
 
 test('main is routed and the call sets a cwd: the spawn passes untouched and holds no step, and one debug line says so', async ($, on) => {
@@ -90,16 +90,16 @@ test('main is routed and the call sets a cwd: the spawn passes untouched and hol
   release()
   await pending
   expect(w.spawns).toHaveLength(1)
-  expect(w.debug.some(l => l.startsWith('styx spawn-wait'))).toBe(false)
-  expect(w.debug.filter(l => l.startsWith('styx inherit'))).toEqual(['styx inherit: Explore sets its own cwd (/elsewhere); it stays native'])
+  expect(w.debug.some(l => l.startsWith('klyth spawn-wait'))).toBe(false)
+  expect(w.debug.filter(l => l.startsWith('klyth inherit'))).toEqual(['klyth inherit: Explore sets its own cwd (/elsewhere); it stays native'])
 })
 
-test("the styx agent tool's own spawn is not claimed for main's route", async ($, on) => {
+test("the klyth agent tool's own spawn is not claimed for main's route", async ($, on) => {
   const w = world(on)
   await start($)
   await model($, 'strong')
   await step($, { turnId: 'm', index: 0 })
-  await $.tool.call({ tool: 'mcp__styx__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore' })
+  await $.tool.call({ tool: 'mcp__klyth__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore' })
   expect(w.spawns).toHaveLength(1)
-  expect(w.debug.some(l => l.startsWith('styx inherit'))).toBe(false)
+  expect(w.debug.some(l => l.startsWith('klyth inherit'))).toBe(false)
 })

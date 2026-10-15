@@ -1,0 +1,18 @@
+[
+  {
+    "type": "text",
+    "text": "Hello, world."
+  },
+  {
+    "type": "usage",
+    "in": 100,
+    "out": 30,
+    "cacheRead": 20,
+    "cacheWrite": 0,
+    "reasoning": 0
+  },
+  {
+    "type": "stop",
+    "reason": "end_turn"
+  }
+]

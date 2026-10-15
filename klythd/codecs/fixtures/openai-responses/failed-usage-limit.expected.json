@@ -1,0 +1,7 @@
+[
+  {
+    "type": "error",
+    "kind": "response",
+    "text": "klyth: p response failed: The usage limit for this app is reached.; your ChatGPT plan's usage limit for klyth is reached; wait for it to reset, or raise it in ChatGPT settings"
+  }
+]

@@ -26,15 +26,15 @@ export function resolve(config: Config, name: string): Target | undefined {
   return p === undefined || m === undefined ? undefined : { kind: 'remote', provider: p, model: m, target: name, label: name }
 }
 
-// Why a `/model` argument that looks like styx's resolves to nothing.
+// Why a `/model` argument that looks like klyth's resolves to nothing.
 export function explain(config: Config, name: string): string {
-  return `styx: ${undeclared(config, name) ?? `"${name}" is not a styx alias or model`}`
+  return `klyth: ${undeclared(config, name) ?? `"${name}" is not a klyth alias or model`}`
 }
 
-// Whether a `/model` argument is styx's to answer. With no valid config, a `provider/model` name and an
-// alias name in `known` count, so a styx alias never reaches the native /model as a model id and every
+// Whether a `/model` argument is klyth's to answer. With no valid config, a `provider/model` name and an
+// alias name in `known` count, so a klyth alias never reaches the native /model as a model id and every
 // other name (`opusplan`, a full id) does.
-export function isStyxShaped(config: Config | undefined, arg: string, known: readonly string[] = []): boolean {
+export function isKlythShaped(config: Config | undefined, arg: string, known: readonly string[] = []): boolean {
   if (arg.startsWith('native/')) return true
   if (config === undefined) return arg.includes('/') || known.includes(arg)
   if (own(config.aliases, arg) !== undefined) return true

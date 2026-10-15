@@ -1,17 +1,18 @@
 // The quiet UI (U13): nothing toasted when healthy, the status line one short segment while routed, every
-// failure one line with its fix, and the details on demand in /styx.
+// failure one line with its fix, and the details on demand in /klyth.
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { parseConfig } from '../hooks/config'
 import type { Config } from '../hooks/config'
 import { statsLine, statusText } from '../hooks/ui'
-import { EXAMPLE_CONFIG } from './fixtures/data.gen'
+import { EXAMPLE_CONFIG, SSE } from './fixtures/data.gen'
+import { denied } from './fixtures/denied'
 import type { WorldOptions } from './world'
-import { CONFIG, CONFIG_OBJECT, HELPER, LOCAL_CONFIG, model, ORIGIN, start, step, styx, world } from './world'
+import { CONFIG, CONFIG_OBJECT, HELPER, LOCAL_CONFIG, model, ORIGIN, start, step, klyth, world } from './world'
 import type { Git } from './world'
 
-const EXAMPLE_HELPER = JSON.stringify(['/usr/bin/security', 'find-generic-password', '-s', 'styx', '-a', 'openai', '-w'])
+const EXAMPLE_HELPER = JSON.stringify(['/usr/bin/security', 'find-generic-password', '-s', 'klyth', '-a', 'openai', '-w'])
 const EXAMPLE_TRUSTED = { [`trust:openai|https://api.openai.com|cmd:${EXAMPLE_HELPER}`]: true }
 const PIN = (turnId: string, target = 'acme/model-b') => ({ turnId, target })
 // The acme provider with auth "none", and the approval of that fingerprint.
@@ -19,9 +20,9 @@ const NONE_CONFIG = JSON.stringify({ ...CONFIG_OBJECT, providers: { acme: { ...C
 const NONE_TRUSTED = { [`trust:openai|${ORIGIN}|none`]: true }
 const FAST = { target: 'acme/model-a', label: 'fast' }
 const FORBIDDEN = { status: 403, pieces: ['{"error":{"message":"Access denied for this route"}}\n'] }
-const FORBIDDEN_TEXT = 'styx: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with bun run auth login acme'
+const FORBIDDEN_TEXT = 'klyth: acme HTTP 403: Access denied for this route; ask the acme admin for access, or store another key with bun run auth login acme'
 const call = ($: Engine, input: Record<string, unknown>) =>
-  $.tool.call({ tool: 'mcp__styx__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore', ...input })
+  $.tool.call({ tool: 'mcp__klyth__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore', ...input })
 const deny = async ($: Engine, input: Record<string, unknown>) => ((await call($, input)) as { deny?: string }).deny
 
 const config = (text: string) => parseConfig(text).config as Config
@@ -91,24 +92,24 @@ test('a refused main step makes no toast; a refused subagent step toasts its lin
   await step($, { turnId: 'm', index: 0 })
   expect(w.toasts).toEqual([])
   await step($, { turnId: 's', index: 0, agentId: 'sub1' })
-  expect(w.toasts).toEqual(['styx: provider acme is not approved; run /model fast to approve it. The step was not sent'])
+  expect(w.toasts).toEqual(['klyth: provider acme is not approved; run /model fast to approve it. The step was not sent'])
 })
 
-test('/styx shows providers with kind, key state and approval, the aliases, and the last routed step per conversation', async ($, on) => {
+test('/klyth shows providers with kind, key state and approval, the aliases, and the last routed step per conversation', async ($, on) => {
   const w = world(on, { routes: { sub1: FAST } })
   await start($)
   await model($, 'strong')
-  await styx($)
+  await klyth($)
   expect(w.transcript.some(l => l.startsWith('  last step'))).toBe(false)
   w.transcript.length = 0
   await step($, { turnId: 'm', index: 0 })
   await step($, { turnId: 's', index: 0, agentId: 'sub1' })
   await step($, { turnId: 'm', index: 1 })
-  await styx($)
+  await klyth($)
   expect(w.transcript.slice(0, 7)).toEqual([
-    'styx · main: strong → acme/model-b',
-    '  PROVIDER  KIND    ORIGIN                KEY         APPROVED',
-    '  acme      openai  https://styx.invalid  cmd cached  yes',
+    'klyth · main: strong → acme/model-b',
+    '  PROVIDER  KIND    ORIGIN                 KEY         APPROVED',
+    '  acme      openai  https://klyth.invalid  cmd cached  yes',
     '  ALIAS   TARGET        EFFORT           NOTE',
     '  fast    acme/model-a  low medium high  cheap, fast explorer for read-only sweeps',
     '  strong  acme/model-b  low medium high  strong generalist',
@@ -116,42 +117,72 @@ test('/styx shows providers with kind, key state and approval, the aliases, and 
   ])
   const last = w.transcript.filter(l => l.startsWith('  last step'))
   expect(last).toHaveLength(2)
-  expect(last[0]).toMatch(/^ {2}last step sub1 → fast: ttfb \d+ ms · total \d+ ms · in 95 · out 14 · stop · prompt styx$/)
+  expect(last[0]).toMatch(/^ {2}last step sub1 → fast: ttfb \d+ ms · total \d+ ms · in 95 · out 14 · stop · prompt klyth$/)
   expect(last[1]).toMatch(/^ {2}last step main → strong: ttfb \d+ ms · total \d+ ms · in 95 · out 14 · stop · prompt main$/)
 })
 
-test('/styx shows none in the KEY column of a keyless provider, before and after a step, and runs no helper', async ($, on) => {
+test('/klyth shows none in the KEY column of a keyless provider, before and after a step, and runs no helper', async ($, on) => {
   const w = world(on, { config: NONE_CONFIG, store: NONE_TRUSTED })
   await start($)
   await model($, 'strong')
-  await styx($)
-  expect(w.transcript.slice(0, 3)).toEqual(['styx · main: strong → acme/model-b', '  PROVIDER  KIND    ORIGIN                KEY   APPROVED', '  acme      openai  https://styx.invalid  none  yes'])
+  await klyth($)
+  expect(w.transcript.slice(0, 3)).toEqual(['klyth · main: strong → acme/model-b', '  PROVIDER  KIND    ORIGIN                 KEY   APPROVED', '  acme      openai  https://klyth.invalid  none  yes'])
   w.transcript.length = 0
   await step($, { turnId: 'm', index: 0 })
-  await styx($)
-  expect(w.transcript[2]).toBe('  acme      openai  https://styx.invalid  none  yes')
+  await klyth($)
+  expect(w.transcript[2]).toBe('  acme      openai  https://klyth.invalid  none  yes')
   expect(w.runs.filter(argv => argv[0] === HELPER[0])).toEqual([])
 })
 
-test('/styx shows none for a keyless provider even when styxd is not running to say so', async ($, on) => {
-  const w = world(on, { config: NONE_CONFIG, store: NONE_TRUSTED, styxd: 'exits' })
+test('/klyth shows none for a keyless provider even when klythd is not running to say so', async ($, on) => {
+  const w = world(on, { config: NONE_CONFIG, store: NONE_TRUSTED, klythd: 'exits' })
   await start($)
-  await styx($)
-  expect(w.transcript[2]).toBe('  acme      openai  https://styx.invalid  none  yes')
+  await klyth($)
+  expect(w.transcript[2]).toBe('  acme      openai  https://klyth.invalid  none  yes')
 })
 
-test('/styx reports a step that failed before it was sent: no first byte, no tokens, finish error', async ($, on) => {
+test('/klyth shows the classifier only when klyth.json turns it on: its model, context and tools, then the actions it allowed, did not allow and was not asked about', async ($, on) => {
+  on('tool.check', () => ({ decision: 'ask' }))
+  const reply = (body: string) => (body.includes('/w/a') ? 'classifier-allow.sse' : 'classifier-ask.sse')
+  const upstream = (r: { body: Record<string, unknown> }) => (JSON.stringify(r.body).includes("klyth's permission classifier") ? { pieces: [SSE[reply(JSON.stringify(r.body))] as string] } : undefined)
+  const w = world(on, { config: JSON.stringify({ ...CONFIG_OBJECT, classifier: { model: 'fast' } }), pin: PIN('t'), upstream })
+  await start($)
+  await klyth($)
+  expect(w.transcript).toContain('  classifier: fast · fresh context · bounded tools · 0 allowed · 0 asked · 0 not classified')
+  await step($, { turnId: 't', index: 0 })
+  const refuse = async (input: Record<string, unknown>, id: string, tool = 'Edit') => {
+    await $.tool.check({ tool, input, tool_use_id: id } as never)
+    return $.classic.PermissionDenied(denied(tool, input, id) as never)
+  }
+  expect(await refuse({ file_path: '/w/a.md', old_string: 'a', new_string: 'b' }, 'toolu_klyth_1')).toEqual({ retry: true })
+  expect(await refuse({ file_path: '/w/a2.md', old_string: 'a', new_string: 'b' }, 'toolu_klyth_4')).toEqual({ retry: true })
+  expect(await refuse({ file_path: '/w/b.md', old_string: 'a', new_string: 'b' }, 'toolu_klyth_2')).toEqual({})
+  expect(await refuse({ command: 'ls' }, 'toolu_klyth_3', 'Bash')).toEqual({})
+  w.transcript.length = 0
+  await klyth($)
+  const at = w.transcript.indexOf('  classifier: fast · fresh context · bounded tools · 2 allowed · 1 asked · 1 not classified · last ineligible (Bash: Bash is not classified; allow it with a /permissions rule or switch modes (Shift+Tab))')
+  expect(w.transcript[at + 1]).toBe('  worktree cleanup: to the Trash (/opt/bin/trash)')
+})
+
+test('/klyth shows no classifier line when klyth.json has no classifier key', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await klyth($)
+  expect(w.transcript.filter(l => l.startsWith('  classifier'))).toEqual([])
+})
+
+test('/klyth reports a step that failed before it was sent: no first byte, no tokens, finish error', async ($, on) => {
   const w = world(on, { keyFails: true })
   await start($)
   await model($, 'strong')
   await step($, { turnId: 'k', index: 0 })
-  await styx($)
+  await klyth($)
   expect(w.transcript.find(l => l.startsWith('  last step'))).toMatch(/^ {2}last step main → strong: ttfb – · total \d+ ms · in – · out – · error · prompt main$/)
 })
 
-// Every user-visible failure of styx's own, as the person reads it: one line, naming what failed and the fix.
+// Every user-visible failure of klyth's own, as the person reads it: one line, naming what failed and the fix.
 // `act` raises it and answers the text; `fix` is the part of the line that says what to do.
-// A `command` row is a /model result: the engine shows it under the mod's name, so the text has no "styx: " of its own.
+// A `command` row is a /model result: the engine shows it under the mod's name, so the text has no "klyth: " of its own.
 type Row = {
   name: string
   opts?: WorldOptions
@@ -173,15 +204,15 @@ const FAILURES: Row[] = [
     name: 'a config error at session start',
     opts: { config: brokenConfig },
     act: async (_, w) => w.toasts[0],
-    text: 'styx: routing off, config error: aliases.strong → provider "acme9" is not declared (declared: acme). Fix ~/.claude/styx.json, then run /styx reload',
-    fix: 'run /styx reload',
+    text: 'klyth: routing off, config error: aliases.strong → provider "acme9" is not declared (declared: acme). Fix ~/.claude/klyth.json, then run /klyth reload',
+    fix: 'run /klyth reload',
   },
   {
     name: '/model while the config is broken',
     opts: { config: brokenConfig },
     act: async $ => (await model($, 'strong')).text,
-    text: 'can\'t switch to strong: config error, aliases.strong → provider "acme9" is not declared (declared: acme). Native model unchanged; fix ~/.claude/styx.json, then run /styx reload',
-    fix: 'fix ~/.claude/styx.json, then run /styx reload',
+    text: 'can\'t switch to strong: config error, aliases.strong → provider "acme9" is not declared (declared: acme). Native model unchanged; fix ~/.claude/klyth.json, then run /klyth reload',
+    fix: 'fix ~/.claude/klyth.json, then run /klyth reload',
     command: true,
   },
   {
@@ -200,15 +231,7 @@ const FAILURES: Row[] = [
     command: true,
   },
   {
-    name: '/model past the input budget',
-    opts: { usageTokens: 310_000 },
-    act: async $ => (await model($, 'acme/small')).text,
-    text: "transcript ~310k tokens exceeds acme/small's 120k input budget; run /compact, then /model acme/small",
-    fix: 'run /compact, then /model acme/small',
-    command: true,
-  },
-  {
-    name: '/model failing inside styx',
+    name: '/model failing inside klyth',
     opts: { store: 'fails' },
     act: async $ => (await model($, 'strong')).text,
     text: "couldn't switch to strong (internal error; see the debug log). Native model unchanged",
@@ -219,29 +242,29 @@ const FAILURES: Row[] = [
     name: 'a step whose target is no longer configured',
     opts: { pin: PIN('g', 'acme/gone') },
     act: $ => answer($, { turnId: 'g', index: 0 }),
-    text: 'styx: acme/gone is not available (no longer configured); the step was not sent. Fix ~/.claude/styx.json, run /styx reload, or pick another model',
-    fix: 'run /styx reload',
+    text: 'klyth: acme/gone is not available (no longer configured); the step was not sent. Fix ~/.claude/klyth.json, run /klyth reload, or pick another model',
+    fix: 'run /klyth reload',
   },
   {
     name: 'a step whose provider is not approved',
     opts: { pin: PIN('u'), store: {} },
     act: $ => answer($, { turnId: 'u', index: 0 }),
-    text: 'styx: provider acme is not approved; run /model strong to approve it. The step was not sent',
+    text: 'klyth: provider acme is not approved; run /model strong to approve it. The step was not sent',
     fix: 'run /model strong to approve it',
   },
   {
     name: 'a step whose transcript cannot be read',
     opts: { pin: PIN('r'), messages: { deny: 'no saved transcript' } },
     act: $ => answer($, { turnId: 'r', index: 0 }),
-    text: 'styx: the transcript of main is unreadable (no saved transcript); the step was not sent; retry',
+    text: 'klyth: the transcript of main is unreadable (no saved transcript); the step was not sent; retry',
     fix: 'retry',
   },
   {
     name: 'a step past the input budget',
     opts: { pin: PIN('b', 'acme/small'), messages: big },
     act: $ => answer($, { turnId: 'b', index: 0 }),
-    text: /^styx: context ~\d+k exceeds acme\/small's 120k input budget; run \/compact$/,
-    fix: 'run /compact',
+    text: /^klyth: context ~\d+k exceeds acme\/small's 95% safety threshold \(114k\) of its 120k configured input budget; run \/klyth compact between turns$/,
+    fix: 'run /klyth compact',
   },
   {
     name: 'a step whose tool schemas fill the budget',
@@ -252,18 +275,18 @@ const FAILURES: Row[] = [
       mcpFile: JSON.stringify({ mcp__big__t: { type: 'object', description: 'y'.repeat(450_000) } }),
     },
     act: $ => answer($, { turnId: 't', index: 0 }),
-    text: /^styx: tool schemas alone take ~\d+k of acme\/small's 120k input budget; set "tools": false on the model or use a larger one$/,
+    text: /^klyth: tool schemas alone take ~\d+k of acme\/small's 120k input budget; set "tools": false on the model or use a larger one$/,
     fix: 'set "tools": false on the model',
   },
   {
-    name: 'a step failing inside styx',
+    name: 'a step failing inside klyth',
     opts: { pin: PIN('i'), compose: 'throws' },
     act: $ => answer($, { turnId: 'i', index: 0 }),
-    text: 'styx: internal error on acme/model-b; the step was not sent to another model (see the debug log)',
+    text: 'klyth: internal error on acme/model-b; the step was not sent to another model (see the debug log)',
     fix: 'see the debug log',
   },
   {
-    name: 'a subagent step failing inside styx, handed back',
+    name: 'a subagent step failing inside klyth, handed back',
     opts: {
       routes: { sub1: FAST },
       messages: () => {
@@ -271,14 +294,14 @@ const FAILURES: Row[] = [
       },
     },
     act: $ => handedBack($, { turnId: 'i', index: 0, agentId: 'sub1' }),
-    text: 'styx: internal error on acme/model-a; the step was not sent to another model (see the debug log)',
+    text: 'klyth: internal error on acme/model-a; the step was not sent to another model (see the debug log)',
     fix: 'see the debug log',
   },
   {
     name: 'a key helper that fails',
     opts: { pin: PIN('k'), keyFails: true },
     act: $ => answer($, { turnId: 'k', index: 0 }),
-    text: 'styx: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme',
+    text: 'klyth: acme key helper failed (exit 1): keychain locked, or no key stored? Run bun run auth login acme',
     fix: 'Run bun run auth login acme',
   },
   {
@@ -291,163 +314,163 @@ const FAILURES: Row[] = [
       },
     },
     act: $ => answer($, { turnId: 'k', index: 0 }),
-    text: /^styx: acme key helper did not finish \(.+\); unlock the keychain or fix auth\.command, then retry$/,
+    text: /^klyth: acme key helper did not finish \(.+\); unlock the keychain or fix auth\.command, then retry$/,
     fix: 'unlock the keychain or fix auth.command, then retry',
   },
   {
     name: 'a rejected key',
     opts: { pin: PIN('x'), upstream: () => ({ status: 401, pieces: ['{"error":{"message":"bad key"}}\n'] }) },
     act: $ => answer($, { turnId: 'x', index: 0 }),
-    text: 'styx: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry',
+    text: 'klyth: acme rejected its key (HTTP 401); store a valid one with bun run auth login acme, then retry',
     fix: 'bun run auth login acme, then retry',
   },
   {
     name: 'a keyless provider that wants a key',
     opts: { pin: PIN('n'), config: NONE_CONFIG, store: NONE_TRUSTED, upstream: () => ({ status: 401, pieces: ['{"error":{"message":"missing key"}}\n'] }) },
     act: $ => answer($, { turnId: 'n', index: 0 }),
-    text: 'styx: acme wants a key (HTTP 401) but auth is "none"; run bun run auth login acme and set auth.command, then retry',
+    text: 'klyth: acme wants a key (HTTP 401) but auth is "none"; run bun run auth login acme and set auth.command, then retry',
     fix: 'run bun run auth login acme and set auth.command, then retry',
   },
   {
     name: 'a stalled response',
     opts: { pin: PIN('s'), upstream: () => ({ cut: 'stall' }) },
     act: $ => answer($, { turnId: 's', index: 0 }),
-    text: 'styx: acme stalled (no data for 600 s); retry',
+    text: 'klyth: acme stalled (no data for 600 s); retry',
     fix: 'retry',
   },
   {
     name: 'a provider that cannot be reached',
     opts: { pin: PIN('c'), upstream: () => ({ refused: 'connect' }) },
     act: $ => answer($, { turnId: 'c', index: 0 }),
-    text: 'styx: acme could not connect (styx.invalid:443 ECONNREFUSED); check the network or VPN, then retry',
+    text: 'klyth: acme could not connect (klyth.invalid:443 ECONNREFUSED) after 10 attempts; check the network or VPN, then retry',
     fix: 'check the network or VPN, then retry',
   },
   {
     name: 'a provider failing with a server error',
     opts: { pin: PIN('f'), upstream: () => ({ status: 502, pieces: ['{"error":{"message":"bad gateway"}}'] }) },
     act: $ => answer($, { turnId: 'f', index: 0 }),
-    text: 'styx: acme HTTP 502: bad gateway; the provider failed: retry, or pick another model',
+    text: 'klyth: acme HTTP 502: bad gateway; the provider failed after 10 attempts: retry, or pick another model',
     fix: 'retry, or pick another model',
   },
   {
-    name: 'a step with no bun to start styxd',
+    name: 'a step with no bun to start klythd',
     opts: { pin: PIN('n'), bun: null },
     act: $ => answer($, { turnId: 'n', index: 0 }),
-    text: 'styx: bun not found — install bun (https://bun.sh), then retry',
+    text: 'klyth: bun not found — install bun (https://bun.sh), then retry',
     fix: 'install bun (https://bun.sh), then retry',
   },
   {
-    name: 'a step whose styxd exits before it is ready',
-    opts: { pin: PIN('d'), styxd: 'exits' },
+    name: 'a step whose klythd exits before it is ready',
+    opts: { pin: PIN('d'), klythd: 'exits' },
     act: $ => answer($, { turnId: 'd', index: 0 }),
-    text: 'styx: styxd did not start (see the debug log); run /styx reload, then retry',
-    fix: 'run /styx reload, then retry',
+    text: 'klyth: klythd did not start (see the debug log); run /klyth reload, then retry',
+    fix: 'run /klyth reload, then retry',
   },
   {
-    name: 'a step after styxd crashed twice',
-    opts: { pin: PIN('p'), styxd: 'exits' },
+    name: 'a step after klythd crashed twice',
+    opts: { pin: PIN('p'), klythd: 'exits' },
     act: async $ => {
       for (const index of [0, 1]) await answer($, { turnId: 'p', index })
       return answer($, { turnId: 'p', index: 2 })
     },
-    text: 'styx: styxd crashed twice; routed models paused until /styx reload',
-    fix: 'paused until /styx reload',
+    text: 'klyth: klythd crashed twice; routed models paused until /klyth reload',
+    fix: 'paused until /klyth reload',
   },
   {
     name: 'an agent call with an unsupported parameter',
     act: $ => deny($, { team_name: 't' }),
-    text: 'styx agent: unsupported parameter(s) team_name; use Agent for them',
+    text: 'klyth agent: unsupported parameter(s) team_name; use Agent for them',
     fix: 'use Agent for them',
   },
   {
     name: 'an agent call naming an unknown model',
     act: $ => deny($, { model: 'zeus' }),
-    text: 'styx agent: unknown model "zeus"; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong',
+    text: 'klyth agent: unknown model "zeus"; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong',
     fix: 'valid: acme/model-a',
   },
   {
     name: 'an agent call with invalid input',
     act: $ => deny($, { effort: 'extreme' }),
-    text: 'styx agent: invalid input: prompt and description must be text, subagent_type and name text when given, effort one of low, medium, high, xhigh, max, run_in_background true or false',
+    text: 'klyth agent: invalid input: prompt and description must be text, subagent_type and name text when given, effort one of low, medium, high, xhigh, max, run_in_background true or false',
     fix: 'run_in_background true or false',
   },
   {
     name: 'an agent call for a fork',
     act: $ => deny($, { subagent_type: 'fork' }),
-    text: "styx agent: a fork runs on its parent's model, and this conversation is native; to fork natively use Agent",
+    text: "klyth agent: a fork runs on its parent's model, and this conversation is native; to fork natively use Agent",
     fix: 'to fork natively use Agent',
   },
   {
     name: 'an agent call setting effort on a native model',
     act: $ => deny($, { model: 'haiku', effort: 'high' }),
-    text: 'styx agent: effort cannot be set for a native model through styx; omit effort, or use Agent',
+    text: 'klyth agent: effort cannot be set for a native model through klyth; omit effort, or use Agent',
     fix: 'omit effort, or use Agent',
   },
   {
     name: 'an agent call with another isolation',
     act: $ => deny($, { isolation: 'remote' }),
-    text: 'styx agent: isolation "remote" is not available through styx; omit it or use "worktree"',
+    text: 'klyth agent: isolation "remote" is not available through klyth; omit it or use "worktree"',
     fix: 'omit it or use "worktree"',
   },
   {
     name: 'an agent call made in a native subagent',
     act: $ => deny($, { agentId: 'sub-x' }),
-    text: 'styx agent: not available from a native subagent or from inside a spawn; use Agent here',
+    text: 'klyth agent: not available from a native subagent or from inside a spawn; use Agent here',
     fix: 'use Agent here',
   },
   {
     name: 'an agent call made in a subagent for a provider not approved',
     opts: { store: {} },
     act: $ => deny($, { agentId: 'sub-x' }),
-    text: 'styx agent: provider acme is not approved; run /model fast once and choose Allow',
+    text: 'klyth agent: provider acme is not approved; run /model fast once and choose Allow',
     fix: 'run /model fast once and choose Allow',
   },
   {
     name: 'an agent call while the config is broken',
     opts: { config: brokenConfig },
     act: $ => deny($, {}),
-    text: 'styx agent: unavailable (config error: aliases.strong → provider "acme9" is not declared (declared: acme)); use Agent',
+    text: 'klyth agent: unavailable (config error: aliases.strong → provider "acme9" is not declared (declared: acme)); use Agent',
     fix: 'use Agent',
   },
   {
     name: 'an agent call for a provider not approved',
     opts: { store: {}, answer: 'Keep native' },
     act: $ => deny($, {}),
-    text: 'styx agent: provider acme is not approved; use Agent for a native model',
+    text: 'klyth agent: provider acme is not approved; use Agent for a native model',
     fix: 'use Agent for a native model',
   },
   {
     name: 'an agent call whose subagent did not start',
     act: $ => deny($, {}),
-    text: 'styx agent: the subagent did not start; retry, or use Agent',
+    text: 'klyth agent: the subagent did not start; retry, or use Agent',
     fix: 'retry, or use Agent',
   },
   {
-    name: 'an agent call failing inside styx',
+    name: 'an agent call failing inside klyth',
     opts: { spawn: 'unanswered' },
     act: $ => deny($, {}),
-    text: 'styx agent: internal error (see the debug log); use Agent',
+    text: 'klyth agent: internal error (see the debug log); use Agent',
     fix: 'use Agent',
   },
   {
     name: 'worktree isolation outside a git work tree',
     opts: { cwd: '/tmp/plain', git: noGit('--show-toplevel') },
     act: $ => deny($, { isolation: 'worktree' }),
-    text: 'styx agent: isolation "worktree" needs a git work tree, and /tmp/plain is not inside one; omit isolation',
+    text: 'klyth agent: isolation "worktree" needs a git work tree, and /tmp/plain is not inside one; omit isolation',
     fix: 'omit isolation',
   },
   {
     name: 'worktree isolation in a repository with no commit',
     opts: { git: noGit('--verify') },
     act: $ => deny($, { isolation: 'worktree' }),
-    text: 'styx agent: isolation "worktree" needs a commit to start from, and /w has none; make a commit or omit isolation',
+    text: 'klyth agent: isolation "worktree" needs a commit to start from, and /w has none; make a commit or omit isolation',
     fix: 'make a commit or omit isolation',
   },
   {
     name: 'a worktree git cannot add',
     opts: { git: a => (a.includes('add') ? { exitCode: 128, stdout: '', stderr: "fatal: a branch named 'x' already exists\n" } : undefined) },
     act: $ => deny($, { isolation: 'worktree' }),
-    text: "styx agent: git worktree add failed: fatal: a branch named 'x' already exists; fix the repository or omit isolation",
+    text: "klyth agent: git worktree add failed: fatal: a branch named 'x' already exists; fix the repository or omit isolation",
     fix: 'fix the repository or omit isolation',
   },
   {
@@ -457,7 +480,7 @@ const FAILURES: Row[] = [
       await $.turn.complete({ answer: 'report', reason: 'answer', durationMs: 1, isAborted: false, turnId: 't', agentId: 'dirty' })
       return w.toasts[0]
     },
-    text: `styx: kept worktree ${WT.path} (branch ${WT.branch}) of subagent dirty: it has changes; merge ${WT.branch} or remove the worktree`,
+    text: `klyth: kept worktree ${WT.path} (branch ${WT.branch}) of subagent dirty: it has changes; merge ${WT.branch} or remove the worktree`,
     fix: `merge ${WT.branch} or remove the worktree`,
   },
 ]
@@ -469,8 +492,20 @@ for (const row of FAILURES) {
     const text = await row.act($, w)
     if (typeof row.text === 'string') expect(text).toBe(row.text)
     else expect(text).toMatch(row.text)
-    expect(text).toMatch(row.command ? /^(?!styx: )/ : /^styx/)
+    expect(text).toMatch(row.command ? /^(?!klyth: )/ : /^klyth/)
     expect(text).not.toContain('\n')
     expect(text).toContain(row.fix)
   })
 }
+
+
+test('large-context selection reports success plus recovery warning without a toast or provider send', async ($, on) => {
+  const w = world(on, { usageTokens: 310_000 })
+  await start($)
+  const chosen = await model($, 'acme/small')
+  expect(chosen.text).toBe("Set model to acme/small\nklyth: existing context ~310k tokens is large for acme/small's 120k input budget; run /compact before continuing. Normal requests still enforce the 95% safety threshold")
+  expect(w.statuses.at(-1)).toBe('acme/small · acme')
+  expect(w.toasts).toEqual([])
+  expect(w.requests).toEqual([])
+  expect(w.native).toEqual([])
+})

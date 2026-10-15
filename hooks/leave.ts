@@ -1,4 +1,4 @@
-// Telling native Claude when the conversation leaves a styx route. Native Claude reads the routed turns in its
+// Telling native Claude when the conversation leaves a klyth route. Native Claude reads the routed turns in its
 // history as its own, and rewriting stored history is not possible, so the next main prompt carries a note.
 // Pure over the Session.
 import type { PromptSubmitInput, PromptSubmitResult } from 'claude-code'
@@ -37,7 +37,7 @@ export async function leftNote(s: Session, e: PromptSubmitInput, next: (e: Promp
   const by = left.map(l => `${l.label === l.target ? l.target : `${l.label} (${l.target})`}${several ? ` for ${l.turns}` : ''}`)
   const who = several ? `${by.slice(0, -1).join(', ')} and ${by.at(-1)}` : by.join('')
   const turns = total === 1 ? 'the previous assistant turn was' : `the previous ${total} assistant turns were`
-  const note = `styx: ${turns} answered by ${who} through styx, not by you; their self-descriptions are that model's, and any Agent calls among them were mcp__styx__agent calls it made. From here you answer as yourself.`
+  const note = `klyth: ${turns} answered by ${who} through klyth, not by you; their self-descriptions are that model's, and any Agent calls among them were mcp__klyth__agent calls it made. From here you answer as yourself.`
   const context = [...(e.context ?? []), note]
   s.left = []
   const entered = await next({ ...e, context })

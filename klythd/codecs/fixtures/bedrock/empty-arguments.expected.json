@@ -1,0 +1,19 @@
+[
+  {
+    "type": "tool_use",
+    "id": "toolu_klyth_000000000000000000000001",
+    "name": "list",
+    "input": {}
+  },
+  {
+    "type": "usage",
+    "in": 9,
+    "out": 3,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  {
+    "type": "stop",
+    "reason": "tool_use"
+  }
+]

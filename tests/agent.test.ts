@@ -1,4 +1,4 @@
-// The styx agent tool: its checks, the arguments it hands $.agent.spawn, trust, worktree isolation and its
+// The klyth agent tool: its checks, the arguments it hands $.agent.spawn, trust, worktree isolation and its
 // cleanup at the subagent's completion, re-entry and the spawn barrier. The kit hands a plugin's own
 // $.agent.spawn no agentId (the host keeps that field for a spawn core started), so here every wrapper
 // spawn ends "did not start"; the launch line and a written route are live evidence (LV3).
@@ -9,29 +9,29 @@ import type { Route } from '../types'
 import { CONFIG_OBJECT, CWD, HELPER, HOME, LOCAL_CONFIG, LOCAL_HELPER, LOCAL_ORIGIN, start, step, TRASH, world } from './world'
 import type { Git } from './world'
 
-const NOT_STARTED = { deny: 'styx agent: the subagent did not start; retry, or use Agent' }
-const BAD_INPUT = 'styx agent: invalid input: prompt and description must be text, subagent_type and name text when given, effort one of low, medium, high, xhigh, max, run_in_background true or false'
-const FORK = "styx agent: a fork runs on its parent's model, and this conversation is native; to fork natively use Agent"
-const NATIVE_SUB = { deny: 'styx agent: not available from a native subagent or from inside a spawn; use Agent here' }
+const NOT_STARTED = { deny: 'klyth agent: the subagent did not start; retry, or use Agent' }
+const BAD_INPUT = 'klyth agent: invalid input: prompt and description must be text, subagent_type and name text when given, effort one of low, medium, high, xhigh, max, run_in_background true or false'
+const FORK = "klyth agent: a fork runs on its parent's model, and this conversation is native; to fork natively use Agent"
+const NATIVE_SUB = { deny: 'klyth agent: not available from a native subagent or from inside a spawn; use Agent here' }
 const call = ($: Engine, input: Record<string, unknown>) =>
-  $.tool.call({ tool: 'mcp__styx__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore', ...input })
+  $.tool.call({ tool: 'mcp__klyth__agent', model: 'fast', prompt: 'list the files', description: 'List files', subagent_type: 'Explore', ...input })
 const complete = ($: Engine, agentId: string | undefined, reason: 'answer' | 'aborted' = 'answer') =>
   $.turn.complete({ answer: 'report', reason, durationMs: 1, isAborted: reason === 'aborted', turnId: 't', ...(agentId ? { agentId } : {}) })
 const gitCalls = (runs: string[][]) => runs.filter(r => r[0] === 'git').map(r => r.slice(1).join(' '))
 const WT = { path: `${CWD}/.claude/worktrees/agent-1234abcd`, branch: 'worktree-agent-1234abcd', base: 'base0', root: CWD }
 const ISOLATED: Route = { target: 'acme/model-a', label: 'fast', worktree: WT }
-const kept = (who: string) => `styx: kept worktree ${WT.path} (branch ${WT.branch}) of subagent ${who}`
+const kept = (who: string) => `kept worktree ${WT.path} (branch ${WT.branch}) of subagent ${who}`
 const NEXT = `; merge ${WT.branch} or remove the worktree`
 
 test('unsupported parameters, an unknown model, bad input, a fork, native effort and remote isolation are denied before any spawn', async ($, on) => {
   const w = world(on)
   await start($)
-  expect(await call($, { team_name: 't', mode: 'plan' })).toEqual({ deny: 'styx agent: unsupported parameter(s) team_name, mode; use Agent for them' })
+  expect(await call($, { team_name: 't', mode: 'plan' })).toEqual({ deny: 'klyth agent: unsupported parameter(s) team_name, mode; use Agent for them' })
   expect(await call($, { model: 'zeus' })).toEqual({
-    deny: 'styx agent: unknown model "zeus"; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong',
+    deny: 'klyth agent: unknown model "zeus"; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong',
   })
   // A native main's forks are always denied, so it is not told a fork may omit the model.
-  expect(await call($, { model: undefined })).toEqual({ deny: 'styx agent: model is required; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong' })
+  expect(await call($, { model: undefined })).toEqual({ deny: 'klyth agent: model is required; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong' })
   for (const model of ['constructor', 'acme/toString']) expect((await call($, { model })) as { deny?: string }).toMatchObject({ deny: expect.stringContaining(`unknown model "${model}"`) })
   expect(await call($, { effort: 'extreme' })).toEqual({
     deny: BAD_INPUT,
@@ -39,13 +39,13 @@ test('unsupported parameters, an unknown model, bad input, a fork, native effort
   expect(await call($, { run_in_background: 'no' })).toEqual({ deny: BAD_INPUT })
   expect(await call($, { subagent_type: 'fork' })).toEqual({ deny: FORK })
   expect(await call($, { subagent_type: 'fork', model: 'haiku' })).toEqual({ deny: FORK })
-  expect(await call($, { model: 'haiku', effort: 'high' })).toEqual({ deny: 'styx agent: effort cannot be set for a native model through styx; omit effort, or use Agent' })
-  expect(await call($, { isolation: 'remote' })).toEqual({ deny: 'styx agent: isolation "remote" is not available through styx; omit it or use "worktree"' })
+  expect(await call($, { model: 'haiku', effort: 'high' })).toEqual({ deny: 'klyth agent: effort cannot be set for a native model through klyth; omit effort, or use Agent' })
+  expect(await call($, { isolation: 'remote' })).toEqual({ deny: 'klyth agent: isolation "remote" is not available through klyth; omit it or use "worktree"' })
   expect(w.spawns).toEqual([])
   expect(gitCalls(w.runs)).toEqual([])
 })
 
-test("a styx agent call made in a subagent's loop never spawns: it is denied with why it could not become an Agent call, else because the subagent is native", async ($, on) => {
+test("a klyth agent call made in a subagent's loop never spawns: it is denied with why it could not become an Agent call, else because the subagent is native", async ($, on) => {
   const w = world(on, { config: JSON.stringify({ ...CONFIG_OBJECT, aliases: { ...CONFIG_OBJECT.aliases, quick: 'native/claude-haiku-4-5' } }) })
   await start($)
   expect(await call($, { agentId: 'sub-x' })).toEqual(NATIVE_SUB)
@@ -53,17 +53,17 @@ test("a styx agent call made in a subagent's loop never spawns: it is denied wit
   expect(await call($, { agentId: 'sub-x', model: 'zeus' })).toMatchObject({ deny: expect.stringContaining('unknown model "zeus"') })
   expect(await call($, { agentId: 'sub-x', subagent_type: 'fork' })).toEqual({ deny: FORK })
   expect(await call($, { agentId: 'sub-x', model: 'quick' })).toEqual({
-    deny: 'styx agent: quick is not a native alias the Agent tool takes (fable, haiku, opus, sonnet); use one of those, or a styx alias',
+    deny: 'klyth agent: quick is not a native alias the Agent tool takes (fable, haiku, opus, sonnet); use one of those, or a klyth alias',
   })
   expect(w.spawns).toEqual([])
   expect(w.asks).toEqual([])
 })
 
-test("a styx agent call from a subagent for a provider not approved says how to approve it, and asks nothing", async ($, on) => {
+test("a klyth agent call from a subagent for a provider not approved says how to approve it, and asks nothing", async ($, on) => {
   const w = world(on, { store: {} })
   await start($)
-  expect(await call($, { agentId: 'sub-x' })).toEqual({ deny: 'styx agent: provider acme is not approved; run /model fast once and choose Allow' })
-  expect(await call($, { agentId: 'sub-x', model: 'acme/model-b' })).toEqual({ deny: 'styx agent: provider acme is not approved; run /model acme/model-b once and choose Allow' })
+  expect(await call($, { agentId: 'sub-x' })).toEqual({ deny: 'klyth agent: provider acme is not approved; run /model fast once and choose Allow' })
+  expect(await call($, { agentId: 'sub-x', model: 'acme/model-b' })).toEqual({ deny: 'klyth agent: provider acme is not approved; run /model acme/model-b once and choose Allow' })
   expect(await call($, { agentId: 'sub-x', model: 'haiku' })).toEqual(NATIVE_SUB)
   expect(w.asks).toEqual([])
   expect(w.spawns).toEqual([])
@@ -74,7 +74,7 @@ test('run_in_background true is main\'s own spawn, which runs in the background;
   await start($)
   expect(await call($, { run_in_background: true })).toEqual(NOT_STARTED)
   expect(w.spawns).toHaveLength(1)
-  expect(await call($, { run_in_background: false })).toEqual({ deny: 'styx agent: run_in_background false needs a conversation that styx routes; omit it, and the subagent runs in the background' })
+  expect(await call($, { run_in_background: false })).toEqual({ deny: 'klyth agent: run_in_background false needs a conversation that klyth routes; omit it, and the subagent runs in the background' })
   expect(w.spawns).toHaveLength(1)
 })
 
@@ -87,11 +87,11 @@ test('the wrapper never runs a key helper, before the trust dialog or after an a
   expect(w.runs.filter(r => r[0] === HELPER[0])).toEqual([])
 })
 
-test('with a broken config the styx agent tool denies with the config error', async ($, on) => {
+test('with a broken config the klyth agent tool denies with the config error', async ($, on) => {
   const w = world(on, { config: JSON.stringify({ ...CONFIG_OBJECT, aliases: { fast: 'acme/none' } }) })
   await start($)
   expect(await call($, {})).toEqual({
-    deny: 'styx agent: unavailable (config error: aliases.fast → "none" is not declared under provider acme (declared: model-a, model-b, small)); use Agent',
+    deny: 'klyth agent: unavailable (config error: aliases.fast → "none" is not declared under provider acme (declared: model-a, model-b, small)); use Agent',
   })
   expect(w.spawns).toEqual([])
 })
@@ -99,7 +99,7 @@ test('with a broken config the styx agent tool denies with the config error', as
 test('a remote target is approved in the wrapper before any spawn; a rejection spawns nothing', async ($, on) => {
   const w = world(on, { store: {}, answer: 'Keep native' })
   await start($)
-  expect(await call($, {})).toEqual({ deny: 'styx agent: provider acme is not approved; use Agent for a native model' })
+  expect(await call($, {})).toEqual({ deny: 'klyth agent: provider acme is not approved; use Agent for a native model' })
   expect(w.asks).toHaveLength(1)
   expect(w.spawns).toEqual([])
 })
@@ -121,12 +121,12 @@ test('a dotted alias is a valid wrapper model: offered in the schema, asked abou
   expect(w.registered[0]?.description).toContain('- model.v1-mini: local/model-v1 — a dotted alias on a plain-http provider')
   expect(await call($, { model: 'model.v1-mini', effort: 'max' })).toEqual(NOT_STARTED)
   expect(w.asks).toEqual([
-    `Plain http: the API key and your data travel unencrypted unless the network itself is private or encrypted. Route styx requests to ${LOCAL_ORIGIN}, with the key printed by ${JSON.stringify(LOCAL_HELPER)}?`,
+    `Plain http: the API key and your data travel unencrypted unless the network itself is private or encrypted. Route klyth requests to ${LOCAL_ORIGIN}, with the key printed by ${JSON.stringify(LOCAL_HELPER)}?`,
   ])
   expect(w.spawns).toHaveLength(1)
   expect(w.spawns[0]).toMatchObject({ prompt: 'list the files', subagent_type: 'Explore' })
   expect(await call($, { model: 'model.v1-mnii' })).toEqual({
-    deny: 'styx agent: unknown model "model.v1-mnii"; valid: fable, haiku, local/model-v1, model.v1-mini, opus, sonnet',
+    deny: 'klyth agent: unknown model "model.v1-mnii"; valid: fable, haiku, local/model-v1, model.v1-mini, opus, sonnet',
   })
 })
 
@@ -141,22 +141,22 @@ test('a refused spawn is relayed, and a rejected one answers the generic deny', 
   const w = world(on, { spawn: () => ({ deny: 'no agents today' }) })
   await start($)
   expect(await call($, {})).toEqual({ deny: 'no agents today' })
-  expect(w.debug.some(l => l.startsWith('styx spawn '))).toBe(false)
+  expect(w.debug.some(l => l.startsWith('klyth spawn '))).toBe(false)
 })
 
 test('a spawn nothing answers reaches the .catch deny; an isolated one has its worktree removed first', async ($, on) => {
   const w = world(on, { spawn: 'unanswered' })
   await start($)
-  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: 'styx agent: internal error (see the debug log); use Agent' })
+  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: 'klyth agent: internal error (see the debug log); use Agent' })
   expect(gitCalls(w.runs).some(c => c.includes('branch -d'))).toBe(true)
   expect((await step($, { turnId: 'r', index: 0, agentId: 'r1' })).result.answer).toBe('native')
-  expect(w.debug.some(l => l.startsWith('styx spawn-wait'))).toBe(false)
+  expect(w.debug.some(l => l.startsWith('klyth spawn-wait'))).toBe(false)
 })
 
 test('isolation outside a git work tree is denied before any spawn', async ($, on) => {
   const w = world(on, { cwd: '/tmp/plain', git: args => (args.includes('--show-toplevel') ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } : undefined) })
   await start($)
-  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: 'styx agent: isolation "worktree" needs a git work tree, and /tmp/plain is not inside one; omit isolation' })
+  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: 'klyth agent: isolation "worktree" needs a git work tree, and /tmp/plain is not inside one; omit isolation' })
   expect(w.spawns).toEqual([])
   expect(gitCalls(w.runs).some(c => c.includes('worktree add'))).toBe(false)
 })
@@ -180,24 +180,24 @@ test('isolation makes a worktree from HEAD on a new branch and spawns in it; one
 // A native main's call is held to the rules a routed caller's Agent call meets at its spawn (inherit.ts), so the same
 // call is answered the same from either; tests/harness/post-spawn.ts compares the two paths end to end.
 const agentFile = (name: string, extra = '') => `---\nname: ${name}\ndescription: d\n${extra}---\nBODY`
-const CANNOT = (type: string, why: string, alias = 'fast') => ({ deny: `styx agent: ${type} ${why}, so styx cannot run it on ${alias}; use another subagent_type or a native model` })
+const CANNOT = (type: string, why: string, alias = 'fast') => ({ deny: `klyth agent: ${type} ${why}, so klyth cannot run it on ${alias}; use another subagent_type or a native model` })
 
-test('a type styx cannot run, a built-in type two agent files name, and a built-in type whose file isolates it elsewhere are denied for a styx model; a native model is not held to them', async ($, on) => {
+test('a type klyth cannot run, a built-in type two agent files name, and a built-in type whose file isolates it elsewhere are denied for a klyth model; a native model is not held to them', async ($, on) => {
   const w = world(on, { files: { '/w/.claude/agents/a.md': agentFile('Explore'), [`${HOME}/.claude/agents/b.md`]: agentFile('Explore'), '/w/.claude/agents/p.md': agentFile('Plan', 'isolation: remote\n') } })
   await start($)
-  expect(await call($, { subagent_type: 'comment-thread-analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type styx can run'))
+  expect(await call($, { subagent_type: 'comment-thread-analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type klyth can run'))
   expect(await call($, { subagent_type: 'Explore' })).toEqual(CANNOT('Explore', 'has more than one definition'))
   expect(await call($, { subagent_type: 'Plan' })).toEqual(CANNOT('Plan', 'runs isolated as remote'))
-  expect(await call($, { subagent_type: 'comment-thread-analyst', model: 'acme/model-b' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type styx can run', 'acme/model-b'))
+  expect(await call($, { subagent_type: 'comment-thread-analyst', model: 'acme/model-b' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type klyth can run', 'acme/model-b'))
   expect(w.spawns).toEqual([])
   expect(await call($, { subagent_type: 'comment-thread-analyst', model: 'haiku' })).toEqual(NOT_STARTED)
   expect(w.spawns).toHaveLength(1)
 })
 
-test('a built-in type whose one agent file styx cannot read is denied for a styx model, and a native model is not held to it', async ($, on) => {
+test('a built-in type whose one agent file klyth cannot read is denied for a klyth model, and a native model is not held to it', async ($, on) => {
   const w = world(on, { files: { '/w/.claude/agents/Explore.md': '---\nname: Explore\ndescription: d\ntools: |\n  Read\n---\nBODY' } })
   await start($)
-  expect(await call($, { subagent_type: 'Explore' })).toEqual(CANNOT('Explore', 'has one agent file styx cannot read'))
+  expect(await call($, { subagent_type: 'Explore' })).toEqual(CANNOT('Explore', 'has one agent file klyth cannot read'))
   expect(w.spawns).toEqual([])
   expect(await call($, { subagent_type: 'Explore', model: 'haiku' })).toEqual(NOT_STARTED)
 })
@@ -215,12 +215,12 @@ test("a fork that reaches the tool untranslated from a routed conversation is de
   const w = world(on, { pin: { turnId: 't', target: 'fast' }, routes: { sub1: { target: 'acme/model-a', label: 'fast', type: 'general-purpose' } } })
   await start($)
   await step($, { turnId: 't', index: 0 })
-  const UNTRANSLATED = { deny: 'styx agent: this fork could not be made an Agent call, so it did not start (see the debug log); retry, or fork with Agent' }
+  const UNTRANSLATED = { deny: 'klyth agent: this fork could not be made an Agent call, so it did not start (see the debug log); retry, or fork with Agent' }
   expect(await call($, { subagent_type: 'fork', model: undefined })).toEqual(UNTRANSLATED)
   expect(await call($, { subagent_type: 'Fork', model: 'fast' })).toEqual(UNTRANSLATED)
-  expect(await $.tool.call({ tool: 'mcp__styx__agent', agentId: 'sub1', prompt: 'p', description: 'd', subagent_type: 'fork' })).toEqual(UNTRANSLATED)
+  expect(await $.tool.call({ tool: 'mcp__klyth__agent', agentId: 'sub1', prompt: 'p', description: 'd', subagent_type: 'fork' })).toEqual(UNTRANSLATED)
   expect(await call($, { model: undefined })).toEqual({
-    deny: "styx agent: model is required, except for a fork, which runs on this conversation's model; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong",
+    deny: "klyth agent: model is required, except for a fork, which runs on this conversation's model; valid: acme/model-a, acme/model-b, acme/small, fable, fast, haiku, opus, sonnet, strong",
   })
   expect(w.spawns).toEqual([])
 })
@@ -230,8 +230,8 @@ test('the type is resolved as the engine resolves an Agent call\'s: another casi
   await start($)
   for (const subagent_type of ['explore', 'EXPLORE', 'Explore']) expect(await call($, { subagent_type })).toEqual(NOT_STARTED)
   expect(w.spawns.map(e => e['subagent_type'])).toEqual(['Explore', 'Explore', 'Explore'])
-  expect(await call($, { subagent_type: 'Comment-Thread-Analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type styx can run'))
-  expect(await call($, { subagent_type: 'SCOUT' })).toEqual({ deny: 'styx agent: subagent_type "SCOUT" matches more than one agent type (Scout, scout); name one of them exactly' })
+  expect(await call($, { subagent_type: 'Comment-Thread-Analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type klyth can run'))
+  expect(await call($, { subagent_type: 'SCOUT' })).toEqual({ deny: 'klyth agent: subagent_type "SCOUT" matches more than one agent type (Scout, scout); name one of them exactly' })
   expect(await call($, { subagent_type: 'scout' })).toEqual(NOT_STARTED)
   expect(w.spawns.map(e => e['subagent_type'])).toEqual(['Explore', 'Explore', 'Explore', 'scout'])
 })
@@ -239,7 +239,7 @@ test('the type is resolved as the engine resolves an Agent call\'s: another casi
 test('a call denied for its type asks no approval of its provider first', async ($, on) => {
   const w = world(on, { store: {} })
   await start($)
-  expect(await call($, { subagent_type: 'comment-thread-analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type styx can run'))
+  expect(await call($, { subagent_type: 'comment-thread-analyst' })).toEqual(CANNOT('comment-thread-analyst', 'is not a type klyth can run'))
   expect(w.asks).toEqual([])
   expect(w.spawns).toEqual([])
 })
@@ -256,7 +256,7 @@ test("an override file's isolation: worktree makes the worktree the subagent wor
 test('a failed git worktree add is denied with its message and spawns nothing', async ($, on) => {
   const w = world(on, { git: args => (args.includes('add') ? { exitCode: 128, stdout: '', stderr: "fatal: a branch named 'x' already exists\n" } : undefined) })
   await start($)
-  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: "styx agent: git worktree add failed: fatal: a branch named 'x' already exists; fix the repository or omit isolation" })
+  expect(await call($, { isolation: 'worktree' })).toEqual({ deny: "klyth agent: git worktree add failed: fatal: a branch named 'x' already exists; fix the repository or omit isolation" })
   expect(w.spawns).toEqual([])
 })
 
@@ -275,7 +275,7 @@ test("an isolated subagent's clean worktree is moved to the Trash at completion,
   expect(w.toasts.some(t => t.includes('kept worktree'))).toBe(false)
 })
 
-test("a worktree the engine made is dropped from the route when the subagent finishes, which then says it was isolated, and is neither touched nor trashed by styx", async ($, on) => {
+test("a worktree the engine made is dropped from the route when the subagent finishes, which then says it was isolated, and is neither touched nor trashed by klyth", async ($, on) => {
   const engine = { path: `${CWD}/.claude/worktrees/agent-p1`, engine: true as const }
   const w = world(on, { routes: { p1: { target: 'acme/model-a', label: 'fast', type: 'Explore', prompt: 'audit', worktree: engine } } })
   await start($)
@@ -291,7 +291,7 @@ test('with no trash on PATH a clean worktree is kept and toasted; git never remo
   await start($)
   await complete($, 'iso2')
   expect(gitCalls(w.runs)).toEqual([`-C ${WT.path} status --porcelain`, `-C ${WT.path} rev-list --count base0..HEAD`])
-  expect(w.toasts).toContain(`${kept('iso2')}: no trash command was found to move it with${NEXT}`)
+  expect(w.toasts).toContain(`klyth: ${kept('iso2')}: no trash command was found to move it with${NEXT}`)
   expect(w.stateSets.some(s => s.key === 'routed')).toBe(false)
 })
 
@@ -300,7 +300,7 @@ test('a worktree whose state cannot be checked is kept and toasted, and nothing 
   const w = world(on, { routes: { gone: ISOLATED }, git: failing })
   await start($)
   await complete($, 'gone')
-  expect(w.toasts).toContain(`${kept('gone')}: it could not be checked (fatal: not a git repository)${NEXT}`)
+  expect(w.toasts).toContain(`klyth: ${kept('gone')}: it could not be checked (fatal: not a git repository)${NEXT}`)
   expect(w.runs.some(r => r[0] === TRASH)).toBe(false)
   expect(gitCalls(w.runs).some(c => c.includes('prune') || c.includes('remove') || c.includes('branch'))).toBe(false)
 })
@@ -315,7 +315,7 @@ for (const [why, git] of [
     await complete($, 'dirty', 'aborted')
     const text = `${kept('dirty')}: it has changes${NEXT}`
     expect(w.transcript).toContain(text)
-    expect(w.toasts).toContain(text)
+    expect(w.toasts).toContain(`klyth: ${text}`)
     expect(gitCalls(w.runs).some(c => c.includes('prune') || c.includes('remove') || c.includes('branch'))).toBe(false)
     expect(w.runs.some(r => r[0] === TRASH)).toBe(false)
   })
@@ -329,14 +329,14 @@ test('completions of unrouted subagents, of routes without a worktree and of mai
 })
 
 test(
-  'the re-entry handler denies a styx agent call raised beneath its own spawn and lets other tools through',
+  'the re-entry handler denies a klyth agent call raised beneath its own spawn and lets other tools through',
   {
     plugins: [
       {
         name: 'nester',
         register(on) {
           on('agent.spawn', async ($, e, next) => {
-            const wrapper = await $.tool.call({ tool: 'mcp__styx__agent', model: 'fast', prompt: 'nested', description: 'n' })
+            const wrapper = await $.tool.call({ tool: 'mcp__klyth__agent', model: 'fast', prompt: 'nested', description: 'n' })
             const read = await $.tool.call({ tool: 'Read', file_path: '/w/notes.txt' })
             $.ui.log(`nester ${JSON.stringify({ wrapper, read })}`)
             return next(e)
@@ -366,10 +366,10 @@ test('a child step raised while the wrapper spawn is held waits for the spawn to
   await inside
   const early = step($, { turnId: 'b', index: 0, agentId: 'b1' })
   await clock.settle()
-  expect(w.debug.some(l => l.startsWith('styx spawn-wait'))).toBe(false)
+  expect(w.debug.some(l => l.startsWith('klyth spawn-wait'))).toBe(false)
   release()
   expect((await early).result.answer).toBe('native')
-  expect(w.debug).toContain('styx spawn-wait b1 outcome=settled routed=false')
+  expect(w.debug).toContain('klyth spawn-wait b1 outcome=settled routed=false')
   expect(await pending).toEqual(NOT_STARTED)
 })
 
@@ -386,13 +386,13 @@ test('a wrapper spawn held past SPAWN_WAIT_MS ends the wait at the bound, and th
   const early = step($, { turnId: 'h', index: 0, agentId: 'h1' })
   await clock.advance(5000)
   expect((await early).result.answer).toBe('native')
-  expect(w.debug).toContain('styx spawn-wait h1 outcome=timeout routed=false')
+  expect(w.debug).toContain('klyth spawn-wait h1 outcome=timeout routed=false')
   release()
   expect(await pending).toEqual(NOT_STARTED)
 })
 
-test('with no config file the styx agent tool names the config directory it looked in', async ($, on) => {
+test('with no config file the klyth agent tool names the config directory it looked in', async ($, on) => {
   world(on, { env: { CLAUDE_CONFIG_DIR: '/cfg' }, config: null })
   await start($)
-  expect(await call($, {})).toEqual({ deny: 'styx agent: unavailable (no /cfg/styx.json); use Agent' })
+  expect(await call($, {})).toEqual({ deny: 'klyth agent: unavailable (no /cfg/klyth.json); use Agent' })
 })

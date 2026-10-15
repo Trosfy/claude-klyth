@@ -1,0 +1,9 @@
+{
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": ["./.claude-plugin/types", "./node_modules/@types"],
+    "types": ["claude-code", "claude-code-tools", "claude-code-mcp", "bun"]
+  },
+  "include": ["klythd", "scripts", "types", "private", "export"],
+  "exclude": ["export/stubs/**"]
+}

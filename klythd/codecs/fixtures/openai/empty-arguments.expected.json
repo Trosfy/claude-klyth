@@ -1,0 +1,19 @@
+[
+  {
+    "type": "tool_use",
+    "id": "toolu_klyth_000000000000000000000001",
+    "name": "TodoRead",
+    "input": {}
+  },
+  {
+    "type": "usage",
+    "in": 100,
+    "out": 30,
+    "cacheRead": 20,
+    "cacheWrite": 0
+  },
+  {
+    "type": "stop",
+    "reason": "tool_use"
+  }
+]

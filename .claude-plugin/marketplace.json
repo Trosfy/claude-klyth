@@ -1,17 +1,17 @@
 {
-  "name": "claude-styx",
+  "name": "klyth",
   "owner": {
     "name": "styx contributors"
   },
   "metadata": {
-    "description": "styx, a Claude Code mod: route Claude Code's main conversation and subagents to other model providers.",
-    "version": "0.1.0"
+    "description": "Klyth, a model extension router for Claude Code.",
+    "version": "0.2.0"
   },
   "plugins": [
     {
-      "name": "styx",
+      "name": "klyth",
       "source": "./",
-      "description": "A Claude Code mod that routes the main conversation and subagents to other model providers through user-defined model aliases, on your own API key",
+      "description": "A model extension router for Claude Code: keep your Claude subscription connected while routing selected model calls to other providers, with separate credentials and billing",
       "category": "development",
       "keywords": ["claude-code", "claude-code-mod", "model-routing", "byok", "subagents", "openai", "bedrock", "anthropic"],
       "tags": ["claude-code-mod", "model-routing", "byok"]

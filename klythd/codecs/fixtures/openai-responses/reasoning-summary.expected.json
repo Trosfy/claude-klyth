@@ -1,0 +1,22 @@
+[
+  {
+    "type": "thinking",
+    "text": "Checking the sum.\n\nAdding it up."
+  },
+  {
+    "type": "text",
+    "text": "4"
+  },
+  {
+    "type": "usage",
+    "in": 60,
+    "out": 40,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "reasoning": 32
+  },
+  {
+    "type": "stop",
+    "reason": "end_turn"
+  }
+]

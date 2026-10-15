@@ -1,0 +1,9 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":1}
+
+event: error
+data: {"type":"error","code":"server_error","message":"upstream overloaded","param":null,"sequence_number":2}
+

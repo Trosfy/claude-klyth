@@ -1,166 +1,152 @@
-<h1 align="center">styx</h1>
+<h1 align="center">Klyth</h1>
 
-<p align="center"><b>Bring your own API key to Claude Code, and keep your Claude subscription</b><br>
-Claude Code 2.1.292 or later (tested on 2.1.293) and Bun · macOS or Linux · MIT license</p>
+<p align="center"><b>Use other AI models inside Claude Code, and keep your Claude subscription</b><br>
+Claude Code 2.1.292 or later · Bun · macOS or Linux · free and open source</p>
 
-styx is a Claude Code mod, a plugin built on Claude Code's function hooks. Your Claude login and subscription keep
-serving native turns. With your own API key for OpenAI, OpenRouter, the Anthropic API, Amazon Bedrock or any
-OpenAI-compatible endpoint (a local Ollama or vLLM included), you can send the main conversation (`/model <alias>`) or
-a subagent to that provider. Claude Code still runs your tools, and the key stays in your OS keyring.
+## Set it up with your AI assistant
 
-## Quickstart
-
-1. Install the mod. Clone this repository into a folder you will keep, since Claude Code loads styx from there. You
-   do not need `bun install`; the dev dependencies are for contributors. To update, run `git pull` in the folder, then
-   `/reload-plugins`.
-
-   ```sh
-   git clone https://github.com/Trosfy/claude-styx.git /path/to/claude-styx
-   claude plugin marketplace add /path/to/claude-styx
-   claude plugin install styx@claude-styx
-   ```
-
-2. Copy the example config. It defines one provider, `openai`, and one alias, `gpt`. (The folder is
-   `$CLAUDE_CONFIG_DIR` when that is set.)
-
-   ```sh
-   cd /path/to/claude-styx
-   cp example.styx.json ~/.claude/styx.json
-   ```
-
-3. Store your key. In the same folder, run the command below. It asks for the key without echoing it, stores it in
-   the macOS Keychain (`secret-tool` on Linux) and reads it back. On Linux, add `--write-config` so it also writes the
-   matching key command into your config.
-
-   ```sh
-   bun run auth login openai
-   ```
-
-4. Start a new Claude Code session, or run `/reload-plugins`.
-5. Type `/model gpt`. The first time, styx asks you to approve the provider's address and key command. Choose
-   **Allow**. The status line then reads `gpt · openai`. Type `/model opus` (or any native model) to go back.
-
-For another provider, edit the config. [docs/PROVIDERS.md](docs/PROVIDERS.md) has a recipe for each one, and
-[docs/CONFIG.md](docs/CONFIG.md) explains every key.
-
-### Let your AI set it up
-
-Start Claude Code in the `claude-styx` folder and paste this:
+Paste this line into Claude Code:
 
 ```text
-Set up styx for me: follow docs/AI_SETUP.md in this folder.
+Set up Klyth for me: follow https://github.com/Trosfy/claude-klyth/blob/main/docs/AI_SETUP.md
 ```
 
-The assistant checks for Bun, writes a `styx.json` for the provider you describe and gives you the command that
-stores your key. You type the key yourself, so the assistant never sees it, and only you can approve a provider.
-[docs/AI_SETUP.md](docs/AI_SETUP.md) has the steps it follows.
+The assistant checks your machine, gets Klyth and helps you connect one provider. You type each key into a hidden
+prompt, so the assistant never sees it. Only you can approve a provider.
 
-## What does it do?
+## What is Klyth?
 
-- It moves the main conversation. `/model gpt` runs the next turns on `openai/gpt-5`, billed to your API key.
-  `/model opus` moves back, and the conversation comes with you.
-- It runs subagents on another model, through the `mcp__styx__agent` tool. Explore, Plan and general-purpose get
-  prompts that styx wrote for them (they are in `hooks/agents.ts`; Anthropic did not write them). To use your own
-  prompt for one, add an agent file whose `name:` is the type, for example `name: Explore`, and styx uses that file
-  instead (a file styx cannot read keeps the type off the alias). Your custom agents keep their own files. Each
-  subagent names the routed model as its identity, not Claude.
-- It keeps your tools local. Tool calls run in Claude Code and go through the usual permission checks; only the model
-  runs elsewhere. styx never reroutes your Claude login or its traffic.
-- It keeps keys out of Claude Code. A credential helper (the macOS Keychain, say) hands the key to a helper process;
-  [Security](#security) says where the key never goes.
+Klyth is a Claude Code mod. It sends the main conversation or a subagent to another model provider. Supported
+providers are OpenAI, OpenRouter, the Anthropic API, Amazon Bedrock and OpenAI-compatible servers such as Ollama or
+vLLM. Your Claude login stays with Claude Code. Each provider uses its own key and billing. Claude Code still runs
+your tools and its permission checks.
 
 ## What you need
 
 | | |
 | --- | --- |
-| Claude Code | 2.1.292 or later. The tool schemas (`hooks/schemas.gen.ts`, generated from the types Claude Code writes beside the mod) are for 2.1.293; on another build `/styx` says when they are stale. |
-| Bun | 1.3.11 tested. The helper process runs on it. styx needs no packages at run time. |
-| A provider | An endpoint that speaks one of the [three kinds](#which-provider-kind-should-i-pick), a model id and an API key. |
-| A keyring | The macOS Keychain, or `secret-tool` on Linux. Any command that prints the key also works (`pass`, `op read`). |
-| System | macOS or Linux, with `/usr/bin/curl`. Optional: `git` and `trash`, for subagents that work in a git worktree. |
+| **Claude Code** | 2.1.292 or later. `/klyth` tells you when its tool schemas do not match your build. |
+| **Bun** | Klyth runs its helper process on Bun. We test with Bun 1.3.11. |
+| **A provider** | An endpoint that speaks one of the [four kinds](#which-provider-kind-should-i-pick), with a model id and a key. A ChatGPT plan works through [Sign in with ChatGPT](docs/PROVIDERS.md#openai-with-your-chatgpt-plan). A local server without a key also works. |
+| **A keyring** | The macOS Keychain, or `secret-tool` on Linux. Any command that prints the key also works, for example `pass`. |
+| **System** | macOS or Linux, with `/usr/bin/curl`. |
+
+## Quickstart
+
+Do it yourself in five steps:
+
+1. Clone Klyth into a folder that you keep. Claude Code loads Klyth from this folder.
+
+   ```sh
+   git clone https://github.com/Trosfy/claude-klyth.git /path/to/klyth
+   claude plugin marketplace add /path/to/klyth
+   claude plugin install klyth@klyth
+   ```
+
+2. Start a new Claude Code session, or run `/reload-plugins`.
+3. Run `/klyth setup`. Choose ChatGPT, Amazon Bedrock, an OpenAI-compatible endpoint or another API provider.
+4. Connect the provider and choose a model. ChatGPT opens a sign-in page in your browser. For an API key, setup shows a
+   command with a hidden prompt. Never paste a key into the chat.
+5. Choose **Save and use model**. Approve the provider when Claude Code asks.
+
+To return to Claude, type `/model opus` or the name of another native model. To update Klyth, run `git pull` in its
+folder and then `/reload-plugins`. If you use Styx now, follow
+[Switch from Styx to Klyth](docs/PROVIDERS.md#switch-from-styx-to-klyth). Do not load both plugins.
+
+Provider recipes for a manual setup are in [docs/PROVIDERS.md](docs/PROVIDERS.md). Each config key is in
+[docs/CONFIG.md](docs/CONFIG.md).
 
 ## Which provider kind should I pick?
 
-A provider's `kind` is the protocol it speaks. If you are unsure, pick `openai`, which most endpoints speak.
+The `kind` is the API that the endpoint speaks. Use the kind that the provider documents.
 
-| Kind | Pick it for | styx calls | Status |
-| --- | --- | --- | --- |
-| `openai` | OpenAI, OpenRouter, Ollama, vLLM, other OpenAI-compatible servers and gateways, Bedrock's non-Claude models | `<baseUrl>/chat/completions` | used live on a self-hosted gateway and on Bedrock's OpenAI endpoint; not yet run against OpenAI itself |
-| `anthropic` | The Anthropic API, a gateway's `/v1/messages` | `<baseUrl>/v1/messages` | live-tested on a gateway; not yet run against api.anthropic.com |
-| `bedrock` | Amazon Bedrock: Claude, GPT, Kimi, Grok | `<baseUrl>/model/<id>/converse-stream` | live-tested on all four; tool loops tested on Claude |
-
-Recipes with the URLs: [docs/PROVIDERS.md](docs/PROVIDERS.md).
+| Kind | Use it for | Status |
+| --- | --- | --- |
+| `openai` | OpenAI Chat Completions, OpenRouter, Ollama, vLLM, other OpenAI-compatible servers | Tested on a gateway and on Bedrock's OpenAI endpoint. Not yet tested against OpenAI. |
+| `openai-responses` | The OpenAI Responses API, with an API key or a ChatGPT plan | Tested on the ChatGPT backend. Sign in with ChatGPT and the API-key path are not yet tested live. |
+| `anthropic` | The Anthropic Messages API, or a gateway's `/v1/messages` | Tested on a gateway. Not yet tested against api.anthropic.com. |
+| `bedrock` | Amazon Bedrock: Claude, GPT, Kimi and Grok | Tested with all four. Tool loops tested with Claude. |
 
 ## Using it
 
-- Switch the main conversation with `/model <alias>`. Tab completes your aliases. `/model opus` (or any native model)
-  switches back. A bare `/model` opens the picker and leaves styx. When you leave a route that answered turns, styx
-  tells the native model which turns were answered elsewhere, so it does not read them as its own.
-- Start a subagent by asking for it by alias ("run an Explore agent on gpt"). Claude calls `mcp__styx__agent`, the
-  subagent runs in the background, and its report arrives as a message. Add `isolation: "worktree"` to give it a git
-  worktree of its own. While main is native, allow `mcp__styx__agent` in `/permissions` to skip the dialog.
-- While main runs on an alias, a plain `Agent` call with no `model` runs on that alias too, as Claude Code runs a
-  subagent on its parent's model; some calls stay native. Forks work where Claude Code offers them, auto mode
-  included: a fork of a routed parent runs on its parent's alias or styx refuses it, and a fork of a native parent
-  stays native. [Which subagents run on an alias](docs/TROUBLESHOOTING.md#which-subagents-run-on-an-alias) has the
-  rules.
-- `/styx` shows the state: providers (kind, address, key state, approved), aliases with their effort levels, routed
-  subagents, and each recent step's time and tokens. `/styx reload` re-reads `styx.json`.
-- A routed request uses your session's effort, mapped to the nearest level the model declares
-  ([Effort](docs/CONFIG.md#effort)). Claude models on the `anthropic` and `bedrock` kinds can also use the prompt cache
-  and think with signed blocks carried across tool calls ([Thinking](docs/CONFIG.md#thinking)).
+- **Move the main conversation:** type `/model <alias>`. Tab completes your aliases. The conversation moves with you.
+  `/model opus` returns to Claude. A new session or `/clear` starts on Claude.
+- **Run a subagent on another model:** ask for it by alias, for example "run an Explore agent on gpt". The subagent
+  runs in the background and sends its report as a message. While main runs on an alias, a plain `Agent` call with no
+  `model` runs on that alias too, with some exceptions.
+  [Which subagents run on an alias](docs/TROUBLESHOOTING.md#which-subagents-run-on-an-alias) gives the rules.
+- **See the state:** `/klyth` shows each provider, alias, routed subagent and recent step. `/klyth reload` reads
+  `klyth.json` again.
+- **See usage and cost:** `/klyth usage` opens a usage pane. Set model rates under
+  [`pricing`](docs/CONFIG.md#pricing-and-usage) to see estimated cost.
+- **Compact:** `/klyth compact` queues the built-in `/compact` when the conversation is idle. The routed model writes
+  the summary. See
+  [Compaction](docs/CONFIG.md#compaction).
+- **Effort and thinking:** a routed request uses your session's effort level ([Effort](docs/CONFIG.md#effort)). Claude
+  models on the `anthropic` and `bedrock` kinds also keep their thinking across tool calls
+  ([Thinking](docs/CONFIG.md#thinking)).
 
-Every styx error is one line that ends with its fix, and `/styx` names the next step when something is wrong.
-[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) lists each message and explains the `styx step` line that
-`claude --debug` logs.
+## Status line
+
+Klyth shows the route under the prompt, for example `gpt · openai`. Claude Code marks this line with a ⚠ icon. To show
+the route without the icon, use Klyth's status line script:
+
+1. Add `"statusLine": "command"` to `klyth.json`. Run `/klyth reload`.
+2. Add this to `~/.claude/settings.json`. Replace `<klyth checkout>` with the path of your Klyth folder.
+
+   ```json
+   {
+     "statusLine": { "type": "command", "command": "bun \"<klyth checkout>/scripts/statusline.ts\"", "refreshInterval": 5 }
+   }
+   ```
+
+The line then shows `◆ gpt · openai` while a route is on, and `◇ Opus` when Claude answers. This setting replaces your
+current status line. A nonempty `NO_COLOR` environment variable removes the colors. To undo the change, remove both
+settings. [Top-level keys](docs/CONFIG.md#top-level-keys) has the details.
+
+## Something went wrong?
+
+- **Klyth shows an error line.** Each Klyth error is one line that ends with its fix. `/klyth` also names the next
+  step. [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) lists every message.
+- **`/klyth setup` says that it needs an attached native pane.** Run it in an interactive Claude Code terminal.
+- **A change to the Klyth code has no effect.** Run `/reload-plugins`. `/klyth reload` reads only `klyth.json`.
+- **You need more detail.** Start `claude --debug`. Each routed step writes one `klyth step` line to the debug log.
+  [Troubleshooting](docs/TROUBLESHOOTING.md) explains its fields.
+
+Open an [issue](https://github.com/Trosfy/claude-klyth/issues) if you are still stuck. Do not attach a full debug log.
+It can contain prompts and other private data.
 
 ## How does it work?
 
-<p align="center"><img src="docs/media/how-it-works.svg" width="860" alt="A Claude Code turn that names a styx alias goes through the styx mod to styxd, which calls an openai, anthropic or bedrock provider with your API key from the Keychain. A turn on a native model goes straight from Claude Code to Anthropic on your Claude subscription, unchanged."></p>
+<p align="center"><img src="docs/media/how-it-works.svg" width="860" alt="A routed Claude Code inference step goes through the Klyth mod to klythd, which calls the selected provider using separate credentials. Native inference stays with Claude Code and its own authentication."></p>
 
-- The mod decides. A native turn passes through unchanged. When `/model` or the styx agent tool names an alias,
-  the mod builds the prompt (the main conversation's own, read from the session with the model's identity
-  rewritten; a subagent's as [What does it do?](#what-does-it-do) says) and hands the turn to styxd.
-- styxd talks to the provider. It is one helper process per session, started when the session starts (if your config
-  declares a provider) and again on use after it exits. It encodes the request for the provider's kind, runs the key
-  command, streams the answer back and reports timing and usage. It is ready in about 20 ms and idles at about 20 MB
-  (macOS footprint, Bun 1.3.11). It exits after 10 idle minutes (65 when a model or alias
-  sets `"cache": "1h"`; see [Thinking](docs/CONFIG.md#thinking)), or when Claude Code does.
-- Native requests change in one way: they carry the `mcp__styx__agent` tool definition. That costs one prompt-cache
-  miss when styx loads, and another each time the config changes.
+- **The mod** answers Claude Code's `turn.step` hook, which runs before each model request. For an alias, the mod
+  builds the prompt and sends it to klythd. A native step continues to Claude as usual.
+- **klythd** is one small helper process per session. It runs your key command, sends the request to the provider
+  and streams the answer back. It stops after 10 idle minutes (65 with a 1-hour prompt cache), or when Claude Code
+  exits.
+- **A failure stays on its route.** Klyth shows an error. It never sends the turn to Claude instead.
 
 ## Security
 
-- Keys come from a credential helper only. No key is in the config, the environment, a command line or a log.
-  `bun run auth login` passes the key on stdin to the Keychain (`secret-tool` on Linux).
-- You approve each provider once. The prompt shows the address and the key command word for word. The approval covers
-  kind, address and command, so changing any of them asks again. Until you approve, styx runs no command and sends
-  nothing.
-- Plain http is opt-in. Set `"allowHttp": true` on that provider only. The prompt warns that the key and your data
-  travel unencrypted unless the network is private. Redirects are never followed.
-- The helper's socket is private. It sits in a folder only you can open, and every call carries a random token that is
-  never in a command line, the environment or a file.
-- A routed turn sends everything in it to that endpoint: prompts, files the model reads, tool output. Route only to
-  endpoints you may send that data to.
-- styx allows some `Agent` calls where Claude Code would ask with no rule or hook behind the question: the ones it
-  makes from a routed model's `mcp__styx__agent` call, and a plain `Agent` fork of a routed conversation, which runs
-  on its parent's alias or is refused, never natively. Your deny rules, ask rules and hooks still apply. [Which
-  subagents run on an alias](docs/TROUBLESHOOTING.md#which-subagents-run-on-an-alias) has the details.
-- Limit: Claude Code's Bash tool can read your Keychain item, as it can read any same-user store. Use scoped keys (a
-  key limited to the models you route to, where your provider offers that) and deny `security find-generic-password`
-  in `/permissions`.
+- **Keys:** Klyth gets each key from a helper command, for example the macOS Keychain. The built-in helper keeps keys
+  out of `klyth.json`, command lines, environment variables and logs. Do not put a key in the arguments of a custom
+  helper.
+- **Approval:** Klyth sends nothing to a provider until you approve it. The approval covers the provider's kind,
+  address and key command. A change to one of these needs a new approval.
+- **Your data:** a routed turn sends its prompts, the files the model reads and the tool output to the provider. Route
+  only to providers that may get that data.
+- **HTTPS:** use HTTPS or an encrypted tunnel. Plain HTTP needs `"allowHttp": true` and sends everything in clear text.
+- **Permissions:** routed subagents get the same permission checks as other actions. An optional
+  [classifier](docs/CONFIG.md#classifier) can give auto mode's verdict on a routed turn.
+- **Limit:** Claude Code's Bash tool can read your Keychain item. Deny `security find-generic-password` and
+  `Bash(bun run auth *)` in `/permissions`.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Credits and license
 
-styx is open source under the [MIT License](LICENSE). Its config shape follows OpenCode's provider model. Claude Code
-belongs to Anthropic, and styx is an independent mod. styx reads nothing from the Claude Code binary. Each prompt and
-tool text it sends a model comes from one of four places: styx itself; you (an agent file's body); the running
-session, read through Claude Code's function hooks (the main conversation's prompt, the transcript, the tools'
-descriptions); or the types Claude Code writes beside the mod for its authors, from which `hooks/schemas.gen.ts` (the
-input schemas of Claude Code's tools) is generated. Where styx must recognise one of Claude Code's own lines, such as
-the model notice it rewrites or the report reminder it reads, it matches the words that identify the line.
-
-To remove styx, follow [Remove styx](docs/TROUBLESHOOTING.md#remove-styx). To work on styx itself, see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Klyth is open source under the [MIT License](LICENSE). Claude Code belongs to Anthropic. Klyth is an independent mod.
+Klyth reads nothing from the Claude Code binary. Each prompt that Klyth sends comes from Klyth, from your agent files,
+or from the session through the hook API. To remove Klyth, follow
+[Remove Klyth](docs/TROUBLESHOOTING.md#remove-klyth). To work on Klyth, see [CONTRIBUTING.md](CONTRIBUTING.md).

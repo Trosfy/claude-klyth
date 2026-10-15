@@ -64,7 +64,7 @@ export function createAssembler(usageModel: string) {
       const failed: Failure | undefined =
         o.failure !== undefined
           ? { kind: 'request', text: o.failure }
-          : (failure ?? (reason === undefined ? { kind: 'request', text: `styx: ${usageModel} ended the step with no stop; retry` } : undefined))
+          : (failure ?? (reason === undefined ? { kind: 'request', text: `klyth: ${usageModel} ended the step with no stop; retry` } : undefined))
       if (failed === undefined) {
         const stopReason = toolUses.length > 0 ? 'tool_use' : reason === 'tool_use' || reason === undefined ? 'end_turn' : reason
         // `deliver`: a text-only successful end is handed back as one call of `handback` carrying the text.

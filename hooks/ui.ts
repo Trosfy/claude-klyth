@@ -1,12 +1,14 @@
-// What styx shows the person: how a target is named, the status line (quiet: a short segment while routed,
-// nothing when native) and the /styx report, where the details live. Pure; the engine draws `styx:` in front
-// of the status itself.
+// What klyth shows the person: how a target is named, the status line (quiet: a short segment while routed,
+// nothing when native) and the /klyth report, where the details live. Pure; the engine draws `klyth:` in front
+// of a pinned status itself.
 import { EFFORTS, own } from './config'
 import type { Alias, Config, ProviderConfig } from './config'
 import { resolve } from './names'
 import type { ProviderStatus, StepStats } from './protocol'
 import { STAMP } from './schemas.gen'
 import type { Session } from './session'
+import { clearRecord, record, viaCommand } from './statusline'
+import type { RecordPort } from './statusline'
 
 // A route's target is an alias or a `provider/model`. The `provider/model` it names:
 export const modelOf = (config: Config | undefined, target: string) => (config === undefined ? undefined : own(config.aliases, target))?.target ?? target
@@ -31,7 +33,7 @@ function pointing(config: Config | undefined, target: string) {
   return label === model ? model : `${label} → ${model}`
 }
 
-// The status line while styx holds main: `<alias> · <provider>`, or `<provider>/<model> · <provider>` with no
+// The status line while klyth holds main: `<alias> · <provider>`, or `<provider>/<model> · <provider>` with no
 // alias; undefined when main is native.
 export function statusText(config: Config | undefined, target: string | null | undefined): string | undefined {
   if (!target) return undefined
@@ -40,10 +42,19 @@ export function statusText(config: Config | undefined, target: string | null | u
   return model.includes('/') ? `${label} · ${model.slice(0, model.indexOf('/'))}` : label
 }
 
-export type StatusPort = { status(text: string | undefined): void }
+export type StatusPort = RecordPort & { status(text: string | undefined): void }
 
-// Shows the status line for main's current target.
-export const showStatus = (io: StatusPort, s: Session) => io.status(statusText(s.loaded.config, s.main))
+// Shows main's current target: pinned as klyth's status line, or, with `statusLine: "command"`, recorded for the
+// status line command Claude Code runs (statusline.ts) while any pinned line is cleared.
+export async function showStatus(io: StatusPort, s: Session) {
+  const text = statusText(s.loaded.config, s.main)
+  if (!viaCommand(s)) {
+    io.status(text)
+    return clearRecord(io, s)
+  }
+  io.status(undefined)
+  await record(io, s, text ?? '')
+}
 
 // Rows padded into aligned columns two spaces apart, the last column unpadded.
 function table(rows: readonly (readonly string[])[]): string[] {
@@ -53,6 +64,8 @@ function table(rows: readonly (readonly string[])[]): string[] {
 }
 
 const seconds = (ms: number | null) => (ms === null ? '–' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`)
+// A token count as a line shows it: thousands rounded to `k`.
+export const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
 // A routed step's stats on one line: time to the first byte, total time, tokens in and out, how it ended.
 export const statsLine = (st: StepStats) => `ttfb ${seconds(st.ttfbMs)} · total ${seconds(st.totalMs)} · in ${st.in ?? '–'} · out ${st.out ?? '–'} · ${st.finish}`
@@ -67,29 +80,30 @@ export type ReportPort = {
 
 const LAST_STEPS = 5
 
-// The /styx report: main's target, a table of providers and one of aliases, routed subagents, the last routed
-// steps, tool and schema gaps, worktree cleanup, and the one next step when something is wrong.
+// The /klyth report: main's target, a table of providers and one of aliases, routed subagents, the last routed
+// steps, tool and schema gaps, the classifier (when the config turns it on), worktree cleanup, and the one next step when
+// something is wrong.
 export async function report(io: ReportPort, s: Session): Promise<string[]> {
   const config = s.loaded.config
   const next: string[] = []
   const lines: string[] = []
   if (config === undefined) {
     if (s.loaded.missing) {
-      lines.push(`styx · routing off: no ${s.loaded.path}`)
-      next.push(`copy example.styx.json to ${s.loaded.path} and fill it in, then run /styx reload`)
+      lines.push(`klyth · routing off: no ${s.loaded.path}`)
+      next.push(`copy example.klyth.json to ${s.loaded.path} and fill it in, then run /klyth reload`)
     } else {
-      lines.push(`styx · routing off: ${s.loaded.path} has errors`, ...s.loaded.errors.map(err => `  ${err}`))
-      next.push(`fix ${s.loaded.path} (errors above), then run /styx reload`)
+      lines.push(`klyth · routing off: ${s.loaded.path} has errors`, ...s.loaded.errors.map(err => `  ${err}`))
+      next.push(`fix ${s.loaded.path} (errors above), then run /klyth reload`)
     }
   } else {
-    lines.push(`styx · main: ${s.main ? pointing(config, s.main) : `native (${await io.engineModel()})`}`)
+    lines.push(`klyth · main: ${s.main ? pointing(config, s.main) : `native (${await io.engineModel()})`}`)
     const providers: string[][] = [['PROVIDER', 'KIND', 'ORIGIN', 'KEY', 'APPROVED']]
     const keys = new Map((await io.keys()).map(k => [k.provider, k]))
     for (const p of Object.values(config.providers)) {
       const key = keys.get(p.id)
       const trusted = await io.trusted(p)
       providers.push([p.id, p.kind, p.origin, key?.key === 'none' ? 'none' : `cmd ${key?.key === 'cached' ? 'cached' : key?.key === 'failed' ? 'failed' : 'not yet run'}`, trusted ? 'yes' : 'no'])
-      if (key?.failure !== undefined) next.push(key.failure.replace(/^styx: /, ''))
+      if (key?.failure !== undefined) next.push(key.failure.replace(/^klyth: /, ''))
       const via = Object.keys(config.aliases)
         .sort()
         .find(a => config.aliases[a]?.target.startsWith(`${p.id}/`))
@@ -116,6 +130,9 @@ export async function report(io: ReportPort, s: Session): Promise<string[]> {
   lines.push(`  ${stamp ?? `schemas: generated on ${STAMP.engineVersion} · OK`}`)
   if (stamp !== undefined) next.push('regenerate the tool schemas with bun scripts/gen-schemas.ts')
   for (const n of s.notes.filter(n => !n.startsWith('schemas:'))) lines.push(`  ${n}`)
+  const classifier = config?.classifier
+  const { allowed, asked, skipped } = s.classifierStats
+  if (classifier !== undefined) lines.push(`  classifier: ${classifier.model} · ${classifier.context} context · ${classifier.tools} tools · ${allowed} allowed · ${asked} asked · ${skipped} not classified${s.classifierIneligible === undefined ? '' : ` · last ineligible (${s.classifierIneligible})`}`)
   lines.push(`  worktree cleanup: ${s.trashPath ? `to the Trash (${s.trashPath})` : 'none (no trash command found; worktrees are kept)'}`)
   if (next.length > 0) lines.push(`  next: ${next[0]}`)
   return lines

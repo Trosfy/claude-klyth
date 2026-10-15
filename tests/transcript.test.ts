@@ -18,8 +18,8 @@ const SAVED: ApiMessage[] = [
       { type: 'text', text: '<system-reminder>\nThe following skills are available…\n</system-reminder>' },
     ],
   },
-  { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_styx_000000000000000000000001', name: 'Grep', input: { pattern: 'retry' } }] },
-  { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_styx_000000000000000000000001', content: 'retry.ts:3' }] },
+  { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_klyth_000000000000000000000001', name: 'Grep', input: { pattern: 'retry' } }] },
+  { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_klyth_000000000000000000000001', content: 'retry.ts:3' }] },
 ]
 
 test('a subagent transcript that opens on its task is carried exactly, reminders included', () => {
@@ -111,9 +111,9 @@ test('withoutTool drops the tool\'s calls and their results, keeps the text a ca
     { role: 'assistant', content: [{ type: 'text', text: 'report' }] },
     { role: 'user', content: [{ type: 'text', text: `${NAME}: ok` }, { type: 'text', text: 'more' }] },
   ])
-  expect(withoutTool([SAVED[0] as ApiMessage, hb('b', 'styx: acme HTTP 403'), done('b')], NAME)).toEqual([
+  expect(withoutTool([SAVED[0] as ApiMessage, hb('b', 'klyth: acme HTTP 403'), done('b')], NAME)).toEqual([
     SAVED[0],
-    { role: 'assistant', content: [{ type: 'text', text: 'styx: acme HTTP 403' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'klyth: acme HTTP 403' }] },
     { role: 'user', content: [{ type: 'text', text: `${NAME}: ok` }] },
   ])
   const keeps: ApiMessage = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'r', content: 'x' }, { type: 'text', text: 'k' }] }

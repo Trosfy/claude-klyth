@@ -1,0 +1,10 @@
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{"role":"assistant","content":"{\"verdict\": \"ask\", "}}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{"content":"\"reason\": \"Nothing the person typed asks for this file to change.\"}"}}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{}}],"usage":{"completion_tokens":24,"prompt_tokens":612,"total_tokens":636}}
+
+data: [DONE]
+

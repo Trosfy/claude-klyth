@@ -20,8 +20,8 @@ const trustKey = (p: ProviderConfig) => `trust:${fingerprint(p)}`
 // itself is private or encrypted; with no key, that anyone on the path can read or alter prompts and answers.
 export function trustPrompt(p: ProviderConfig): string {
   const plain = p.origin.startsWith('http:')
-  if (p.auth === 'none') return `${plain ? 'Plain http and no key: anyone on the path can read or alter prompts and answers. ' : ''}Route styx requests to ${p.origin}, sending no key?`
-  const ask = `Route styx requests to ${p.origin}, with the key printed by ${JSON.stringify(p.auth.command)}?`
+  if (p.auth === 'none') return `${plain ? 'Plain http and no key: anyone on the path can read or alter prompts and answers. ' : ''}Route klyth requests to ${p.origin}, sending no key?`
+  const ask = `Route klyth requests to ${p.origin}, with the key printed by ${JSON.stringify(p.auth.command)}?`
   return plain ? `Plain http: the API key and your data travel unencrypted unless the network itself is private or encrypted. ${ask}` : ask
 }
 

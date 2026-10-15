@@ -54,11 +54,11 @@ test('anything but text and lists in the frontmatter is a named error, never a t
   const cases: [string, string][] = [
     [file('name: a', '---', 'B'), 'no frontmatter (the file must open with a --- line)'],
     [file('---', 'name: a', 'B'), 'the frontmatter has no closing --- line'],
-    [file('---', 'description: |', '  two', '  lines', '---', 'B'), 'line 2: "|" is a YAML form styx does not read (only text and lists are)'],
-    [file('---', 'description: >-', '  folded', '---', 'B'), 'line 2: ">-" is a YAML form styx does not read (only text and lists are)'],
-    [file('---', 'mcpServers: {a: 1}', '---', 'B'), 'line 2: "{a: 1}" is a YAML form styx does not read (only text and lists are)'],
-    [file('---', 'model: &m opus', '---', 'B'), 'line 2: "&m opus" is a YAML form styx does not read (only text and lists are)'],
-    [file('---', 'tools: [Read, [Grep]]', '---', 'B'), 'line 2: "[Grep]" is a YAML form styx does not read (only text and lists are)'],
+    [file('---', 'description: |', '  two', '  lines', '---', 'B'), 'line 2: "|" is a YAML form klyth does not read (only text and lists are)'],
+    [file('---', 'description: >-', '  folded', '---', 'B'), 'line 2: ">-" is a YAML form klyth does not read (only text and lists are)'],
+    [file('---', 'mcpServers: {a: 1}', '---', 'B'), 'line 2: "{a: 1}" is a YAML form klyth does not read (only text and lists are)'],
+    [file('---', 'model: &m opus', '---', 'B'), 'line 2: "&m opus" is a YAML form klyth does not read (only text and lists are)'],
+    [file('---', 'tools: [Read, [Grep]]', '---', 'B'), 'line 2: "[Grep]" is a YAML form klyth does not read (only text and lists are)'],
     [file('---', 'tools: [Read, Grep', '---', 'B'), 'line 2: a [list] that does not close on its line'],
     [file('---', 'hooks:', '  PreToolUse: x', '---', 'B'), 'line 3: not a "key: value" line, a "- item" of a list, or a comment'],
     [file('---', 'name:a', '---', 'B'), 'line 2: not a "key: value" line, a "- item" of a list, or a comment'],
@@ -84,11 +84,11 @@ test('a definition allows the tools it lists (all when it lists none, or "*"), l
 })
 
 const INSTALLS = {
-  'agent-runbooks@agent-runbooks': [
+  'acme-agents@acme-agents': [
     { scope: 'project', installPath: '/p/project/', projectPath: '/w' },
     { scope: 'user', installPath: '/p/user' },
   ],
-  'agent-runbooks-extra@x': [{ scope: 'user', installPath: '/p/extra' }],
+  'acme-agents-extra@x': [{ scope: 'user', installPath: '/p/extra' }],
   'twice@one': [{ scope: 'user', installPath: '/p/one' }],
   'twice@two': [{ scope: 'user', installPath: '/p/two' }],
   'elsewhere@m': [{ scope: 'project', installPath: '/p/else', projectPath: '/other' }],
@@ -99,9 +99,9 @@ test('a plugin directory is the install installed_plugins.json records: this pro
   const parsed = parseInstalled(JSON.stringify({ version: 2, plugins: INSTALLS }))
   if ('error' in parsed) throw new Error(parsed.error)
   const { plugins } = parsed
-  expect(pluginRoot(plugins, 'agent-runbooks', '/w')).toEqual({ root: '/p/project' })
-  expect(pluginRoot(plugins, 'agent-runbooks', '/elsewhere')).toEqual({ root: '/p/user' })
-  expect(pluginRoot(plugins, 'agent-runbooks-extra', '/w')).toEqual({ root: '/p/extra' })
+  expect(pluginRoot(plugins, 'acme-agents', '/w')).toEqual({ root: '/p/project' })
+  expect(pluginRoot(plugins, 'acme-agents', '/elsewhere')).toEqual({ root: '/p/user' })
+  expect(pluginRoot(plugins, 'acme-agents-extra', '/w')).toEqual({ root: '/p/extra' })
   expect(pluginRoot(plugins, 'twice', '/w')).toEqual({ error: 'plugin twice is installed from more than one marketplace (twice@one, twice@two)' })
   expect(pluginRoot(plugins, 'elsewhere', '/w')).toEqual({ error: 'plugin elsewhere@m has no install for /w' })
   expect(pluginRoot(plugins, 'relative', '/w')).toEqual({ error: 'plugin relative@m has no install for /w' })
@@ -114,8 +114,8 @@ test('a plugin directory is the install installed_plugins.json records: this pro
 test("a project's install covers a session in a directory beneath the project, not one in a sibling sharing its prefix", () => {
   const parsed = parseInstalled(JSON.stringify({ version: 2, plugins: INSTALLS }))
   if ('error' in parsed) throw new Error(parsed.error)
-  expect(pluginRoot(parsed.plugins, 'agent-runbooks', '/w/hooks/deep')).toEqual({ root: '/p/project' })
-  expect(pluginRoot(parsed.plugins, 'agent-runbooks', '/wx')).toEqual({ root: '/p/user' })
+  expect(pluginRoot(parsed.plugins, 'acme-agents', '/w/hooks/deep')).toEqual({ root: '/p/project' })
+  expect(pluginRoot(parsed.plugins, 'acme-agents', '/wx')).toEqual({ root: '/p/user' })
   expect(pluginRoot(parsed.plugins, 'elsewhere', '/other/sub')).toEqual({ root: '/p/else' })
   expect(pluginRoot(parsed.plugins, 'elsewhere', '/otherwise')).toEqual({ error: 'plugin elsewhere@m has no install for /otherwise' })
 })
@@ -150,13 +150,13 @@ test('the system prompt is the body, the notes, the environment, the handback wh
       '',
       HANDBACK_GUIDANCE,
       '',
-      'You are powered by model-a served by the acme provider, running as the scout subagent via the styx alias fast.',
+      'You are powered by model-a served by the acme provider, running as the scout subagent via the klyth alias fast.',
     ),
   )
   const bare = agentSystem('BODY', { ...at, handback: false })
   expect(bare).not.toContain('Platform:')
   expect(bare).not.toContain('SubagentHandback')
-  expect(bare.split('\n').at(-1)).toBe('You are powered by model-a served by the acme provider, running as the scout subagent via styx.')
+  expect(bare.split('\n').at(-1)).toBe('You are powered by model-a served by the acme provider, running as the scout subagent via klyth.')
 })
 
 test('dates are local YYYY-MM-DD, and the built-in agent types are the engine\'s own', () => {
@@ -184,7 +184,7 @@ test('builtinPrompt: Plan has the critical-files heading, general-purpose its pr
   for (const type of ['statusline-setup', 'claude-code-guide', 'web-fetch', 'anything-else']) expect(builtinPrompt(type, new Set())).toBe(GENERIC_PROMPT)
 })
 
-test('NOT_REPRODUCED names the types styx cannot run, all of them built in', () => {
+test('NOT_REPRODUCED names the types klyth cannot run, all of them built in', () => {
   expect([...NOT_REPRODUCED].sort()).toEqual(['comment-thread-analyst'])
   for (const type of NOT_REPRODUCED) expect(BUILTIN_AGENTS).toContain(type)
 })

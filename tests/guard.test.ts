@@ -8,10 +8,10 @@ import type { Route } from '../types'
 import { guardFailed } from '../hooks/pool'
 import type { StepStats } from '../hooks/protocol'
 import { createSession } from '../hooks/session'
-import { HANDBACK_REMINDER, start, step, styx, world } from './world'
+import { HANDBACK_REMINDER, start, step, klyth, world } from './world'
 
 // Main's tool list as `$.tool.list()` gives it, the tools Explore may not call among them.
-const MAIN_TOOLS = ['Agent', 'Bash', 'Edit', 'ExitPlanMode', 'Glob', 'Grep', 'NotebookEdit', 'Read', 'Artifact', 'ArtifactCheck', 'WebFetch', 'Write', 'mcp__styx__agent'].map(name => ({
+const MAIN_TOOLS = ['Agent', 'Bash', 'Edit', 'ExitPlanMode', 'Glob', 'Grep', 'NotebookEdit', 'Read', 'Artifact', 'ArtifactCheck', 'WebFetch', 'Write', 'mcp__klyth__agent'].map(name => ({
   name,
   description: name,
   mcp: name.startsWith('mcp__'),
@@ -32,13 +32,13 @@ test('a routed subagent is denied a tool its step did not offer, and runs the on
   const w = world(on, { routes: { ex1: EXPLORE }, tools: MAIN_TOOLS })
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'ex1' })
-  expect(await write($, 'ex1')).toEqual({ deny: 'styx: Write is not available to the Explore subagent' })
+  expect(await write($, 'ex1')).toEqual({ deny: 'klyth: Write is not available to the Explore subagent' })
   expect(await read($, 'ex1')).toEqual({ result: 'file text' })
-  expect(w.debug).toContain('styx guard ex1 Write denied')
-  expect(w.debug).toContain('styx guard ex1 Read allowed')
+  expect(w.debug).toContain('klyth guard ex1 Write denied')
+  expect(w.debug).toContain('klyth guard ex1 Read allowed')
 })
 
-test('a native subagent and the main conversation pass the guard, even while styx routes main', async ($, on) => {
+test('a native subagent and the main conversation pass the guard, even while klyth routes main', async ($, on) => {
   runs(on)
   const w = world(on, { routes: { nat: { target: null, label: 'haiku' }, ex1: EXPLORE }, tools: MAIN_TOOLS, pin: { turnId: 'm', target: 'acme/model-b' } })
   await start($)
@@ -48,7 +48,7 @@ test('a native subagent and the main conversation pass the guard, even while sty
   expect(await write($, 'nat')).toEqual({ result: 'written' })
   expect(await write($)).toEqual({ result: 'written' })
   expect(await write($, 'stranger')).toEqual({ result: 'written' })
-  expect(w.debug.filter(l => l.startsWith('styx guard'))).toEqual([])
+  expect(w.debug.filter(l => l.startsWith('klyth guard'))).toEqual([])
 })
 
 test('a subagent with no route is native: its route is looked up once, not at every tool call, until its turn finishes', async ($, on) => {
@@ -77,7 +77,7 @@ test('the offered set follows each step: a tool that was not offered at step 0 i
   world(on, { routes: { gp1: { ...EXPLORE, type: 'general-purpose' } }, tools: () => tools })
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'gp1' })
-  expect(await write($, 'gp1')).toEqual({ deny: 'styx: Write is not available to the general-purpose subagent' })
+  expect(await write($, 'gp1')).toEqual({ deny: 'klyth: Write is not available to the general-purpose subagent' })
   tools = MAIN_TOOLS
   await step($, { turnId: 't', index: 1, agentId: 'gp1' })
   expect(await write($, 'gp1')).toEqual({ result: 'written' })
@@ -88,34 +88,34 @@ test('a failed check denies a routed subagent and lets any other agent go on', (
   s.routes.set('ex1', EXPLORE)
   s.routes.set('nat', { target: null, label: 'haiku' })
   s.offered.set('known', new Set(['Read']))
-  const denied = { deny: 'styx: could not check Write for this subagent, so it was denied; retry, or see the debug log' }
+  const denied = { deny: 'klyth: could not check Write for this subagent, so it was denied; retry, or see the debug log' }
   expect(guardFailed(s, { tool: 'Write', agentId: 'ex1' })).toEqual(denied)
   expect(guardFailed(s, { tool: 'Write', agentId: 'known' })).toEqual(denied)
   expect(guardFailed(s, { tool: 'Write', agentId: 'nat' })).toBeUndefined()
-  // an agent styx has not cached is denied: a failed route read must not let a restricted child through
+  // an agent klyth has not cached is denied: a failed route read must not let a restricted child through
   expect(guardFailed(s, { tool: 'Write', agentId: 'stranger' })).toEqual(denied)
   expect(guardFailed(s, { tool: 'Write' })).toBeUndefined()
 })
 
-test('a /styx reload mid-run keeps the routes and the offered sets, so the guard still denies', async ($, on) => {
+test('a /klyth reload mid-run keeps the routes and the offered sets, so the guard still denies', async ($, on) => {
   runs(on)
   const w = world(on, { routes: { ex1: EXPLORE }, tools: MAIN_TOOLS })
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'ex1' })
-  await styx($, 'reload')
-  expect(await write($, 'ex1')).toEqual({ deny: 'styx: Write is not available to the Explore subagent' })
+  await klyth($, 'reload')
+  expect(await write($, 'ex1')).toEqual({ deny: 'klyth: Write is not available to the Explore subagent' })
   expect(await read($, 'ex1')).toEqual({ result: 'file text' })
   w.transcript.length = 0
-  await styx($)
+  await klyth($)
   expect(w.transcript).toContain('  routed subagents: ex1 → fast')
   expect(w.transcript.some(l => l.startsWith('  last step ex1 → fast'))).toBe(true)
 })
 
-test('a /styx reload mid-run keeps main routed: a turn pinned before it still goes remote', async ($, on) => {
+test('a /klyth reload mid-run keeps main routed: a turn pinned before it still goes remote', async ($, on) => {
   const w = world(on, { pin: { turnId: 'm', target: 'acme/model-b' } })
   await start($)
   await step($, { turnId: 'm', index: 0 })
-  await styx($, 'reload')
+  await klyth($, 'reload')
   await step($, { turnId: 'm', index: 1 })
   expect(w.requests).toHaveLength(2)
   expect(w.nativeSteps).toEqual([])
@@ -145,7 +145,6 @@ test('resetForReload clears what the config text decides, and nothing a running 
   s.pin = { turnId: 't', target: 'acme/model-a' }
   s.trashPath = '/opt/bin/trash'
   s.platform = 'darwin'
-  s.userAgent = 'claude-code/2.1.292'
   const loaded = s.loaded
 
   s.resetForReload()
@@ -160,16 +159,16 @@ test('resetForReload clears what the config text decides, and nothing a running 
   expect(s.promptTokens.get('main')).toEqual({ tokens: 10, messageCount: 2 })
   expect(s.lastSteps.get('main')?.stats).toBe(stats)
   expect(s.blindHandbacks.get('ex1')).toBe('t')
-  expect([s.goodAliases, s.main, s.pin, s.trashPath, s.platform, s.userAgent, s.loaded]).toEqual([['fast'], 'acme/model-a', { turnId: 't', target: 'acme/model-a' }, '/opt/bin/trash', 'darwin', 'claude-code/2.1.292', loaded])
+  expect([s.goodAliases, s.main, s.pin, s.trashPath, s.platform, s.loaded]).toEqual([['fast'], 'acme/model-a', { turnId: 't', target: 'acme/model-a' }, '/opt/bin/trash', 'darwin', loaded])
 })
 
 test('after a hot reload the guard still holds a routed subagent: its route is read back from state and its offered set rebuilt from its type', async ($, on) => {
   runs(on)
   const w = world(on, { routes: { ex1: EXPLORE }, tools: MAIN_TOOLS })
   await start($)
-  expect(await write($, 'ex1')).toEqual({ deny: 'styx: Write is not available to the Explore subagent' })
+  expect(await write($, 'ex1')).toEqual({ deny: 'klyth: Write is not available to the Explore subagent' })
   expect(await read($, 'ex1')).toEqual({ result: 'file text' })
-  expect(w.debug).toContain('styx guard ex1 Write denied')
+  expect(w.debug).toContain('klyth guard ex1 Write denied')
   expect(await write($, 'nat')).toEqual({ result: 'written' })
   expect(await write($)).toEqual({ result: 'written' })
 })
@@ -184,7 +183,7 @@ test("a custom agent type's set is rebuilt from its definition after a reload, a
     files: { '/w/.claude/agents/scout.md': '---\nname: scout\ndescription: d\ntools: Read\n---\nSCOUT BODY' },
   })
   await start($)
-  expect(await write($, 'c1')).toEqual({ deny: 'styx: Write is not available to the scout subagent' })
+  expect(await write($, 'c1')).toEqual({ deny: 'klyth: Write is not available to the scout subagent' })
   expect(await read($, 'c1')).toEqual({ result: 'file text' })
   expect(await $.tool.call({ tool: 'SubagentHandback', message: 'done', agentId: 'c1' } as never)).toEqual({ result: 'handed back' })
 })
@@ -194,17 +193,17 @@ test("a subagent's finished turn forgets what the session held of it; a later me
   const w = world(on, { routes: { ex1: EXPLORE }, tools: MAIN_TOOLS })
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'ex1' })
-  await styx($)
+  await klyth($)
   expect(w.transcript).toContain('  routed subagents: ex1 → fast')
   expect(w.transcript.some(l => l.startsWith('  last step ex1 → fast'))).toBe(true)
   w.transcript.length = 0
   await $.turn.complete({ answer: 'report', reason: 'answer', durationMs: 1, isAborted: false, turnId: 't', agentId: 'ex1' })
-  await styx($)
+  await klyth($)
   expect(w.transcript).toContain('  routed subagents: none')
   expect(w.transcript.some(l => l.startsWith('  last step ex1'))).toBe(false)
   await step($, { turnId: 't2', index: 0, agentId: 'ex1' })
   expect(w.requests).toHaveLength(2)
-  expect(await write($, 'ex1')).toEqual({ deny: 'styx: Write is not available to the Explore subagent' })
+  expect(await write($, 'ex1')).toEqual({ deny: 'klyth: Write is not available to the Explore subagent' })
 })
 
 test('forget drops one subagent from every map, an unfinished step of it included, and leaves the others', () => {
@@ -241,8 +240,8 @@ test('a child of a routed parent restricted to Read is offered no Bash, and is d
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'kid' })
   expect(offeredIn(w, 0)).toEqual(['Read', 'SubagentHandback'])
-  expect(await bash($, 'kid')).toEqual({ deny: 'styx: Bash is not available to the general-purpose subagent' })
-  expect(await write($, 'kid')).toEqual({ deny: 'styx: Write is not available to the general-purpose subagent' })
+  expect(await bash($, 'kid')).toEqual({ deny: 'klyth: Bash is not available to the general-purpose subagent' })
+  expect(await write($, 'kid')).toEqual({ deny: 'klyth: Write is not available to the general-purpose subagent' })
   expect(await read($, 'kid')).toEqual({ result: 'file text' })
 })
 
@@ -250,9 +249,9 @@ test("a child's pool follows the whole chain, from state alone after a hot reloa
   runs(on)
   const w = world(on, { routes: { par: SCOUT, mid: kid('par'), low: kid('mid') }, tools: MAIN_TOOLS, files: SCOUT_FILES })
   await start($)
-  expect(await bash($, 'low')).toEqual({ deny: 'styx: Bash is not available to the general-purpose subagent' })
+  expect(await bash($, 'low')).toEqual({ deny: 'klyth: Bash is not available to the general-purpose subagent' })
   expect(await read($, 'low')).toEqual({ result: 'file text' })
-  expect(w.debug).toContain('styx guard low Bash denied')
+  expect(w.debug).toContain('klyth guard low Bash denied')
   // Each route of the chain is read from state once.
   expect(w.routeReads).toEqual(['low', 'mid', 'par'])
 })
@@ -267,7 +266,7 @@ test("a child of main is unchanged by the pools of other agents, and so is a chi
     expect(await bash($, id), id).toEqual({ result: 'ran' })
     expect(await write($, id), id).toEqual({ result: 'written' })
   }
-  expect(await bash($, 'par')).toEqual({ deny: 'styx: Bash is not available to the scout subagent' })
+  expect(await bash($, 'par')).toEqual({ deny: 'klyth: Bash is not available to the scout subagent' })
 })
 
 test("an Explore whose override file has a tools: line is held to it: Write is not offered and the guard denies it, as it denies Edit; Read and Bash run", async ($, on) => {
@@ -277,8 +276,8 @@ test("an Explore whose override file has a tools: line is held to it: Write is n
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'ex1' })
   expect(offeredIn(w, 0)).toEqual(['Bash', 'Read', 'SubagentHandback'])
-  expect(await write($, 'ex1')).toEqual({ deny: 'styx: Write is not available to the Explore subagent' })
-  expect(await $.tool.call({ tool: 'Edit', file_path: '/w/a.txt', old_string: 'a', new_string: 'b', agentId: 'ex1' } as never)).toEqual({ deny: 'styx: Edit is not available to the Explore subagent' })
+  expect(await write($, 'ex1')).toEqual({ deny: 'klyth: Write is not available to the Explore subagent' })
+  expect(await $.tool.call({ tool: 'Edit', file_path: '/w/a.txt', old_string: 'a', new_string: 'b', agentId: 'ex1' } as never)).toEqual({ deny: 'klyth: Edit is not available to the Explore subagent' })
   expect(await read($, 'ex1')).toEqual({ result: 'file text' })
   expect(await bash($, 'ex1')).toEqual({ result: 'ran' })
 })
@@ -301,9 +300,9 @@ test("a fork's pool is capped by its parent's and holds no SubagentHandback, tho
   expect(offeredIn(w, 1)).toEqual(['Read'])
   expect(offeredIn(w, 2)).toEqual(EVERY.filter(name => name !== 'SubagentHandback'))
   expect(await $.tool.call({ tool: 'SubagentHandback', message: 'done', agentId: 'fk' } as never)).toEqual({ result: 'engine says' })
-  expect(w.debug).toContain('styx guard fk SubagentHandback passed to the engine')
-  expect(await bash($, 'fk')).toEqual({ deny: 'styx: Bash is not available to the fork subagent' })
-  expect(await write($, 'fk2')).toEqual({ deny: 'styx: Write is not available to the fork subagent' })
+  expect(w.debug).toContain('klyth guard fk SubagentHandback passed to the engine')
+  expect(await bash($, 'fk')).toEqual({ deny: 'klyth: Bash is not available to the fork subagent' })
+  expect(await write($, 'fk2')).toEqual({ deny: 'klyth: Write is not available to the fork subagent' })
   expect(await read($, 'fk')).toEqual({ result: 'file text' })
   expect(await write($, 'mfk')).toEqual({ result: 'written' })
 })
@@ -323,7 +322,7 @@ test('a subagent the engine refused SubagentHandback is offered it no more, and 
   await step($, { turnId: 't', index: 0, agentId: 'ex2' })
   expect(offeredIn(w, 0)).not.toContain('SubagentHandback')
   expect(await $.tool.call({ tool: 'SubagentHandback', message: 'done', agentId: 'ex2' } as never)).toEqual({ result: 'engine says' })
-  expect(w.debug).toContain('styx guard ex2 SubagentHandback passed to the engine')
+  expect(w.debug).toContain('klyth guard ex2 SubagentHandback passed to the engine')
 })
 
 test('SubagentHandback stays offered to a child of a parent whose own list leaves it out, in the request and in the guard rebuilt after a reload', async ($, on) => {
@@ -361,8 +360,8 @@ for (const [why, routes, above] of [
     await start($)
     await step($, { turnId: 't', index: 0, agentId: 'kid' })
     expect(offeredIn(w, 0)).toEqual(['SubagentHandback'])
-    expect(w.debug).toContain('styx pool kid: the route of a subagent above it cannot be read, so it is offered SubagentHandback alone')
-    expect(await read($, 'kid')).toEqual({ deny: 'styx: Read is not available to the general-purpose subagent' })
+    expect(w.debug).toContain('klyth pool kid: the route of a subagent above it cannot be read, so it is offered SubagentHandback alone')
+    expect(await read($, 'kid')).toEqual({ deny: 'klyth: Read is not available to the general-purpose subagent' })
     expect(await $.tool.call({ tool: 'SubagentHandback', message: 'none', agentId: 'kid' } as never)).toEqual({ result: 'handed back' })
     // A pool that failed closed is not kept: once the route above can be read, the next step is offered its tools.
     stored[above] = SCOUT

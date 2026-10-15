@@ -1,13 +1,13 @@
-// Leaving a styx route: the next main prompt carries one context block telling native Claude which turns another
+// Leaving a klyth route: the next main prompt carries one context block telling native Claude which turns another
 // model answered; moving to another route, or a route that answered nothing, carries none.
 import type { On, PromptSubmitInput } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { CONFIG, model, start, step, styx, world } from './world'
+import { CONFIG, model, start, step, klyth, world } from './world'
 
 const note = (turns: number, who: string) =>
-  `styx: ${turns === 1 ? 'the previous assistant turn was' : `the previous ${turns} assistant turns were`} answered by ${who} through styx, not by you; their self-descriptions are that model's, and any Agent calls among them were mcp__styx__agent calls it made. From here you answer as yourself.`
+  `klyth: ${turns === 1 ? 'the previous assistant turn was' : `the previous ${turns} assistant turns were`} answered by ${who} through klyth, not by you; their self-descriptions are that model's, and any Agent calls among them were mcp__klyth__agent calls it made. From here you answer as yourself.`
 const STRONG = 'strong (acme/model-b)'
 
 // The bottom of prompt.submit: it records each prompt as it arrives there, and refuses the first `drops` of them.
@@ -46,7 +46,7 @@ for (const [how, leave] of leaves) {
   })
 }
 
-test('a switch that does not leave styx (auto, resume) attaches nothing', async ($, on) => {
+test('a switch that does not leave klyth (auto, resume) attaches nothing', async ($, on) => {
   world(on)
   const prompts = bottom(on)
   await start($)
@@ -182,7 +182,7 @@ test('a prompt delivered into a running routed turn carries no block and leaves 
   expect(prompts.contexts()).toEqual([[], [note(1, STRONG)], []])
 })
 
-test('/styx reload keeps the block owed, naming the route as it was when it was left', async ($, on) => {
+test('/klyth reload keeps the block owed, naming the route as it was when it was left', async ($, on) => {
   let config = CONFIG
   world(on, { config: () => config })
   const prompts = bottom(on)
@@ -191,7 +191,7 @@ test('/styx reload keeps the block owed, naming the route as it was when it was 
   await turns($, 't1')
   await model($, 'sonnet')
   config = JSON.stringify({ providers: 5 })
-  await styx($, 'reload')
+  await klyth($, 'reload')
   await submit($)
   expect(prompts.contexts()).toEqual([[note(1, STRONG)]])
 })

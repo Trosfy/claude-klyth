@@ -1,4 +1,4 @@
-// The routed system prompt: main's composed prompt with the routed model's identity, the prompts styx writes for
+// The routed system prompt: main's composed prompt with the routed model's identity, the prompts klyth writes for
 // the built-in subagent types, an agent file that names a built-in type, a custom agent with no definition, and
 // the main-only tools no subagent is offered.
 import { expect, test } from 'claude-code/testing'
@@ -7,7 +7,7 @@ import type { Engine } from 'claude-code/testing'
 import { BUILTIN_NOTES, FORK_REPORT, GENERAL_PURPOSE_PROMPT, GENERIC_PROMPT, HANDBACK_GUIDANCE, SEARCH_WITH_BASH, SEARCH_WITH_TOOLS, SUBAGENT_DENIED, toolFilter } from '../hooks/agents'
 import { rewriteMain, systemFor, withIdentity } from '../hooks/prompts'
 import { createSession } from '../hooks/session'
-import { HANDBACK_REMINDER, HOME, model, start, step, styx, world } from './world'
+import { HANDBACK_REMINDER, HOME, model, start, step, klyth, world } from './world'
 
 const ENGINE_IDENTITY = 'You are powered by the model named Opus 5.5. The exact model ID is claude-opus-5-5. Assistant knowledge cutoff is June 2026.'
 const tools = (...names: string[]) => names.map(name => ({ name, description: name, mcp: false }))
@@ -17,7 +17,7 @@ const systemOf = (w: ReturnType<typeof world>, i = 0) => sent(w, i)[0]?.content 
 const offered = (w: ReturnType<typeof world>, i = 0) => ((w.requests[i]!.body['tools'] as { function: { name: string } }[] | undefined) ?? []).map(t => t.function.name)
 const notes = async ($: Engine, w: ReturnType<typeof world>) => {
   w.transcript.length = 0
-  await styx($)
+  await klyth($)
   return w.transcript.filter(l => l.startsWith('  agents: '))
 }
 // The tail every routed subagent's prompt ends with, for a subagent in /w on darwin offered SubagentHandback.
@@ -26,7 +26,7 @@ const tail = (notesText: string, type: string) =>
     notesText,
     '# Environment\nYou have been invoked in the following environment:\n - Primary working directory: /w\n - Platform: darwin\n - Today\'s date: 2026-10-07',
     HANDBACK_GUIDANCE,
-    `You are powered by model-a served by the acme provider, running as the ${type} subagent via the styx alias fast.`,
+    `You are powered by model-a served by the acme provider, running as the ${type} subagent via the klyth alias fast.`,
   ].join('\n\n')
 test('the main prompt names the routed model: env_info_model replaced, identity sections and the cutoff and model-family lines dropped, the rest as composed', () => {
   const sections = [
@@ -104,7 +104,7 @@ test('general-purpose, and a type no file names that is not built in, run on the
   expect(JSON.stringify(w.runs)).not.toContain('scripts/')
 })
 
-test('statusline-setup, claude-code-guide and web-fetch get the generic prompt, and /styx says nothing about it', async ($, on) => {
+test('statusline-setup, claude-code-guide and web-fetch get the generic prompt, and /klyth says nothing about it', async ($, on) => {
   const w = world(on, {
     routes: { g1: route('claude-code-guide'), s1: route('statusline-setup'), f1: route('web-fetch') },
     tools: tools('Bash', 'Edit', 'Read', 'WebFetch'),
@@ -160,8 +160,8 @@ test("a fork of a routed main is sent main's rewritten prompt alone; a fork of a
   expect(systemOf(w, 5)).toBe(systemOf(w, 1))
   for (const n of [1, 3, 4, 5]) expect(systemOf(w, n)).not.toContain('SubagentHandback(')
   w.transcript.length = 0
-  await styx($)
-  expect(w.transcript.filter(l => l.includes('prompt fork of ')).map(l => l.slice(l.indexOf('prompt ')))).toEqual(expect.arrayContaining(['prompt fork of main', 'prompt fork of styx', 'prompt fork of custom']))
+  await klyth($)
+  expect(w.transcript.filter(l => l.includes('prompt fork of ')).map(l => l.slice(l.indexOf('prompt ')))).toEqual(expect.arrayContaining(['prompt fork of main', 'prompt fork of klyth', 'prompt fork of custom']))
 })
 
 test("a fork whose parent's route cannot be read is not sent: its step hands back one line", async ($, on) => {
@@ -169,7 +169,7 @@ test("a fork whose parent's route cannot be read is not sent: its step hands bac
   await start($)
   await step($, { turnId: 't', index: 0, agentId: 'f1' })
   expect(w.requests).toEqual([])
-  expect(w.toasts).toEqual(['styx: the route of the parent of this fork cannot be read; the step was not sent; retry'])
+  expect(w.toasts).toEqual(['klyth: the route of the parent of this fork cannot be read; the step was not sent; retry'])
 })
 
 // systemFor over a port whose composed main prompt holds environment sections that name the session's directory
@@ -200,7 +200,7 @@ const IDENTITY = 'You are powered by model-a served by the acme provider.'
 const cwdLines = (text: string) => text.split('\n').filter(l => l.includes('Primary working directory'))
 
 test("a claude subagent in a worktree is told the worktree alone as its directory: main's environment sections are left out, the model notice is the routed identity", async () => {
-  const worktree = { path: '/w/.claude/worktrees/agent-1', branch: 'styx/agent-1', base: 'base0', root: '/w' }
+  const worktree = { path: '/w/.claude/worktrees/agent-1', branch: 'klyth/agent-1', base: 'base0', root: '/w' }
   const { text, source } = await composing()(route('claude', { worktree }))
   expect(source).toBe('main')
   expect(cwdLines(text)).toEqual([' - Primary working directory: /w/.claude/worktrees/agent-1'])
@@ -217,7 +217,7 @@ test("a claude subagent in the session's directory keeps main's environment sect
   expect(text).not.toContain('Opus')
 })
 
-test("a built-in type with one agent file that names it runs on the file's body, and /styx names the file; two files, or none, leave it on styx's prompt", async ($, on) => {
+test("a built-in type with one agent file that names it runs on the file's body, and /klyth names the file; two files, or none, leave it on klyth's prompt", async ($, on) => {
   const file = (body: string) => `---\nname: Explore\ndescription: d\n---\n${body}`
   const one = world(on, { files: { '/w/.claude/agents/x.md': file('EXPLORE FILE BODY'), '/w/.claude/agents/claude.md': '---\nname: claude\ndescription: d\n---\nCLAUDE FILE BODY' }, routes: { e1: route('Explore'), k1: route('claude') }, tools: tools('Bash', 'Glob', 'Grep', 'Read') })
   await start($)
@@ -232,7 +232,7 @@ test("a built-in type with one agent file that names it runs on the file's body,
   ])
 })
 
-test("a built-in type that two agent files name is not read from either: it runs on styx's prompt", async ($, on) => {
+test("a built-in type that two agent files name is not read from either: it runs on klyth's prompt", async ($, on) => {
   const file = '---\nname: Explore\ndescription: d\n---\nEXPLORE FILE BODY'
   const w = world(on, { files: { '/w/.claude/agents/a.md': file, [`${HOME}/.claude/agents/b.md`]: file }, routes: { e1: route('Explore') }, tools: tools('Bash', 'Read') })
   await start($)
@@ -241,7 +241,7 @@ test("a built-in type that two agent files name is not read from either: it runs
   expect(systemOf(w)).toContain(SEARCH_WITH_BASH)
 })
 
-test('a custom agent type with no definition runs as general-purpose, its prompt and tools, and says so once in /styx', async ($, on) => {
+test('a custom agent type with no definition runs as general-purpose, its prompt and tools, and says so once in /klyth', async ($, on) => {
   const w = world(on, { routes: { c1: route('ghost') }, tools: tools('AskUserQuestion', 'Bash', 'ExitPlanMode', 'Read', 'TodoWrite') })
   await start($)
   await step($, { turnId: 'a', index: 0, agentId: 'c1' })
@@ -254,7 +254,7 @@ test('a custom agent type with no definition runs as general-purpose, its prompt
 })
 
 test("a custom agent's prompt is its definition's body, then the native notes, its worktree, the handback and who answers", async ($, on) => {
-  const worktree = { path: '/w/.claude/worktrees/agent-1', branch: 'styx/agent-1', base: 'base0', root: '/w' }
+  const worktree = { path: '/w/.claude/worktrees/agent-1', branch: 'klyth/agent-1', base: 'base0', root: '/w' }
   const w = world(on, {
     files: { '/w/.claude/agents/scout.md': '---\nname: scout\ndescription: d\n---\nSCOUT BODY' },
     routes: { c1: route('scout', { worktree }) },

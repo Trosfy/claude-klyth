@@ -1,7 +1,16 @@
-// Styx's config (styx.json in Claude Code's config directory): parsing, all-or-nothing validation, model-name resolution, and the
+// Klyth's config (klyth.json in Claude Code's config directory): parsing, all-or-nothing validation, model-name resolution, and the
 // pure texts and schemas derived from a config. No I/O.
 import type { Effort } from '../types'
+import { classifierOf } from './classifier-rules'
+import type { ClassifierConfig } from './classifier-rules'
+import { compactionOf, type Compaction } from './host-window'
+import { KINDS } from './kinds'
+import type { Kind, MaxTokensParam } from './kinds'
+import { parsePricing } from './pricing'
+import type { Pricing } from './pricing'
 
+export { KINDS }
+export type { Kind }
 export type JsonSchema = Readonly<Record<string, unknown>>
 type Json = Record<string, unknown>
 
@@ -10,11 +19,12 @@ export type ModelConfig = {
   contextWindow: number
   maxInputTokens?: number
   maxOutputTokens: number
-  maxTokensParam?: 'max_tokens' | 'max_completion_tokens'
+  maxTokensParam?: MaxTokensParam
   systemRole: 'system' | 'developer' | 'user'
   effort?: Partial<Record<Effort, Json>>
   // How long the prompt cache lives, on the kinds that take cache points; absent is off.
   cache?: Cache
+  pricing?: Pricing
   tools: boolean
   parallelToolCalls: boolean
   vision: boolean
@@ -26,8 +36,6 @@ export type ModelConfig = {
 
 // A prompt-cache lifetime: five minutes or one hour.
 export type Cache = '5m' | '1h'
-// The provider protocols: Chat Completions, the Anthropic Messages API, and Amazon Bedrock Converse.
-export type Kind = 'openai' | 'anthropic' | 'bedrock'
 // A provider's key source: a credential helper run with no shell, whose standard output is the key, kept
 // for ttlSeconds; or "none", for a server that checks no key (no authorization header is sent).
 export type Auth = { command: readonly string[]; ttlSeconds: number } | 'none'
@@ -44,6 +52,8 @@ export type ProviderConfig = {
   headers: Record<string, string>
   params: Json
   timeoutMs?: number
+  // The header that carries a per-conversation id, so a provider that caches by session can reuse the prompt; absent sends none.
+  sessionHeader?: string
   streamUsage: boolean
   maxTools: number
   models: Readonly<Record<string, ModelConfig>>
@@ -53,7 +63,11 @@ export type ProviderConfig = {
 // only to requests made through the alias.
 // An alias's `cache` key, when present, replaces its model's: absent `cache` there means the cache is off.
 export type Alias = { target: string; note?: string; params?: Json; effort?: ModelConfig['effort']; cache?: Cache; headers?: Record<string, string> }
-export type Config = { providers: Readonly<Record<string, ProviderConfig>>; aliases: Readonly<Record<string, Alias>> }
+// Where main's route shows: pinned under the prompt by klyth (the default), or left to the command Claude Code's own
+// `statusLine` setting runs (see statusline.ts).
+export type StatusLine = 'pinned' | 'command'
+// `classifier` is present when klyth.json opts in with a `classifier` key (see classifier-rules.ts), `statusLine` with a `statusLine` key.
+export type Config = { providers: Readonly<Record<string, ProviderConfig>>; aliases: Readonly<Record<string, Alias>>; classifier?: ClassifierConfig; statusLine?: StatusLine; compaction?: Compaction }
 
 // What a model name names: a native model (passed to the engine) or a declared remote one. A remote
 // target's `label` is the name it was asked for (an alias or `provider/model`), which routes keep and steps
@@ -61,28 +75,6 @@ export type Config = { providers: Readonly<Record<string, ProviderConfig>>; alia
 export type Target =
   | { kind: 'native'; model: string; label: string }
   | { kind: 'remote'; provider: ProviderConfig; model: ModelConfig; target: string; label: string }
-
-// What each kind adds to the common provider and model keys, the request body keys styx sets (refused in
-// params), whether its requests always carry a max-tokens value, and whether it takes cache points (the
-// others cache on their own).
-type KindSpec = { providerKeys: readonly string[]; modelKeys: readonly string[]; reservedParams: readonly string[]; sendsMaxTokens: boolean; cache: boolean }
-export const KINDS: Readonly<Record<Kind, KindSpec>> = {
-  openai: {
-    providerKeys: ['streamUsage'],
-    modelKeys: ['maxTokensParam', 'systemRole', 'parallelToolCalls'],
-    reservedParams: ['model', 'messages', 'tools', 'stream', 'stream_options', 'n', 'tool_choice', 'functions', 'function_call'],
-    sendsMaxTokens: false,
-    cache: false,
-  },
-  anthropic: {
-    providerKeys: ['authHeader'],
-    modelKeys: ['parallelToolCalls'],
-    reservedParams: ['model', 'messages', 'system', 'tools', 'tool_choice', 'stream', 'max_tokens'],
-    sendsMaxTokens: true,
-    cache: true,
-  },
-  bedrock: { providerKeys: [], modelKeys: [], reservedParams: ['messages', 'system', 'toolConfig'], sendsMaxTokens: true, cache: true },
-}
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 // The native Agent tool's `model` values.
@@ -98,10 +90,10 @@ const HEADER_VALUE_RE = /^[\x20-\x7e]*$/
 // a dash, and no trailing dot.
 const HOST_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/
 export const RESERVED_ALIASES = new Set(['fable', 'opus', 'sonnet', 'haiku', 'default', 'inherit', 'native'])
-const PROVIDER_KEYS = ['kind', 'baseUrl', 'allowHttp', 'auth', 'headers', 'params', 'timeoutMs', 'maxTools', 'models']
+const PROVIDER_KEYS = ['kind', 'baseUrl', 'allowHttp', 'auth', 'headers', 'params', 'timeoutMs', 'maxTools', 'sessionHeader', 'models']
 // The keys a model and an alias share: what a request is built from.
 const REQUEST_KEYS = ['params', 'effort', 'cache', 'headers']
-const MODEL_KEYS = ['contextWindow', 'maxInputTokens', 'maxOutputTokens', 'tools', 'vision', ...REQUEST_KEYS]
+const MODEL_KEYS = ['contextWindow', 'maxInputTokens', 'maxOutputTokens', 'tools', 'vision', 'pricing', ...REQUEST_KEYS]
 const KEY_TTL_S = 300
 // The longest timer a runtime takes (2^31 - 1 ms); a longer one fires at once.
 export const MAX_TIMEOUT_MS = 2 ** 31 - 1
@@ -111,16 +103,17 @@ export const isObject = (v: unknown): v is Json => typeof v === 'object' && v !=
 export const own = <T>(map: Readonly<Record<string, T>>, key: string): T | undefined => (Object.hasOwn(map, key) ? map[key] : undefined)
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0
 const isKind = (v: unknown): v is Kind => typeof v === 'string' && Object.hasOwn(KINDS, v)
+const KIND_NAMES = Object.keys(KINDS).map(k => `"${k}"`)
 
 // Unknown keys of `obj`, each reported with its path.
-function allowKeys(obj: Json, keys: readonly string[], path: string, errors: string[]) {
+export function allowKeys(obj: Json, keys: readonly string[], path: string, errors: string[]) {
   for (const k of Object.keys(obj)) if (!keys.includes(k)) errors.push(`${path}.${k}: unknown key`)
 }
 
 function params(v: unknown, kind: Kind, path: string, errors: string[]): Json {
   if (v === undefined) return {}
   if (!isObject(v)) return errors.push(`${path}: must be an object`), {}
-  for (const k of KINDS[kind].reservedParams) if (k in v) errors.push(`${path}.${k}: reserved; styx sets it`)
+  for (const k of KINDS[kind].reservedParams) if (k in v) errors.push(`${path}.${k}: reserved; klyth sets it`)
   return v
 }
 
@@ -221,14 +214,14 @@ function model(id: string, kind: Kind, v: unknown, path: string, errors: string[
   const { contextWindow, maxInputTokens, maxOutputTokens } = v
   const maxTokensParam = mine('maxTokensParam')
   const systemRole = mine('systemRole')
+  const pricing = parsePricing(v['pricing'], `${path}.pricing`, errors)
   if (!isCount(contextWindow)) errors.push(`${path}.contextWindow: must be a positive integer`)
   if (!isCount(maxOutputTokens)) errors.push(`${path}.maxOutputTokens: must be a positive integer`)
   if (maxInputTokens !== undefined && (!isCount(maxInputTokens) || (isCount(contextWindow) && maxInputTokens > contextWindow))) {
     errors.push(`${path}.maxInputTokens: must be a positive integer no larger than contextWindow`)
   }
-  if (maxTokensParam !== undefined && maxTokensParam !== 'max_tokens' && maxTokensParam !== 'max_completion_tokens') {
-    errors.push(`${path}.maxTokensParam: must be max_tokens or max_completion_tokens`)
-  }
+  const maxTokensParams: readonly unknown[] = spec.maxTokensParams
+  if (maxTokensParam !== undefined && !maxTokensParams.includes(maxTokensParam)) errors.push(`${path}.maxTokensParam: must be one of ${spec.maxTokensParams.join(', ')}`)
   if (systemRole !== undefined && systemRole !== 'system' && systemRole !== 'developer' && systemRole !== 'user') {
     errors.push(`${path}.systemRole: must be system, developer or user`)
   }
@@ -237,8 +230,9 @@ function model(id: string, kind: Kind, v: unknown, path: string, errors: string[
     contextWindow: contextWindow as number,
     ...(maxInputTokens === undefined ? {} : { maxInputTokens: maxInputTokens as number }),
     maxOutputTokens: maxOutputTokens as number,
-    ...(maxTokensParam === undefined ? {} : { maxTokensParam: maxTokensParam as ModelConfig['maxTokensParam'] & string }),
+    ...(maxTokensParam === undefined ? {} : { maxTokensParam: maxTokensParam as MaxTokensParam }),
     systemRole: (systemRole as ModelConfig['systemRole'] | undefined) ?? 'system',
+    ...(pricing === undefined ? {} : { pricing }),
     tools: bool(v['tools'], true, `${path}.tools`, errors),
     parallelToolCalls: bool(mine('parallelToolCalls'), true, `${path}.parallelToolCalls`, errors),
     vision: bool(v['vision'], true, `${path}.vision`, errors),
@@ -253,8 +247,8 @@ function model(id: string, kind: Kind, v: unknown, path: string, errors: string[
 function provider(id: string, v: unknown, path: string, errors: string[]): ProviderConfig | undefined {
   if (!ID_RE.test(id) || id === 'native') errors.push(`${path}: provider ids are lowercase letters, digits and dashes (not "native")`)
   if (!isObject(v)) return errors.push(`${path}: must be an object`), undefined
-  const { kind: rawKind, baseUrl, timeoutMs, maxTools, models } = v
-  if (!isKind(rawKind)) errors.push(`${path}.kind: must be "openai", "anthropic" or "bedrock"`)
+  const { kind: rawKind, baseUrl, timeoutMs, maxTools, sessionHeader, models } = v
+  if (!isKind(rawKind)) errors.push(`${path}.kind: must be ${KIND_NAMES.slice(0, -1).join(', ')} or ${KIND_NAMES.at(-1)}`)
   // An unknown kind's keys are checked as openai's.
   const kind = isKind(rawKind) ? rawKind : 'openai'
   const spec = KINDS[kind]
@@ -292,6 +286,9 @@ function provider(id: string, v: unknown, path: string, errors: string[]): Provi
   if (authHeader !== undefined && authHeader !== 'bearer' && authHeader !== 'x-api-key') errors.push(`${path}.authHeader: must be "bearer" or "x-api-key"`)
   if (timeoutMs !== undefined && !(isCount(timeoutMs) && timeoutMs <= MAX_TIMEOUT_MS)) errors.push(`${path}.timeoutMs: must be a positive integer of at most ${MAX_TIMEOUT_MS}`)
   if (maxTools !== undefined && !isCount(maxTools)) errors.push(`${path}.maxTools: must be a positive integer`)
+  // The secret-name rule of `headers` does not apply: the value is a random id, not a secret.
+  if (sessionHeader !== undefined && !(typeof sessionHeader === 'string' && HEADER_NAME_RE.test(sessionHeader))) errors.push(`${path}.sessionHeader: not a header name`)
+  else if (typeof sessionHeader === 'string' && /^(authorization|x-api-key|content-type|user-agent)$/i.test(sessionHeader)) errors.push(`${path}.sessionHeader: ${sessionHeader} is a header klyth sets itself`)
   const out: Record<string, ModelConfig> = {}
   if (!isObject(models)) errors.push(`${path}.models: must be a map of model ids`)
   else {
@@ -315,13 +312,14 @@ function provider(id: string, v: unknown, path: string, errors: string[]): Provi
     headers: headers(v['headers'], `${path}.headers`, errors),
     params: shared,
     ...(timeoutMs === undefined ? {} : { timeoutMs: timeoutMs as number }),
+    ...(sessionHeader === undefined ? {} : { sessionHeader: sessionHeader as string }),
     streamUsage: bool(spec.providerKeys.includes('streamUsage') ? v['streamUsage'] : undefined, true, `${path}.streamUsage`, errors),
     maxTools: (maxTools as number | undefined) ?? 128,
     models: out,
   }
 }
 
-// Parses and validates a config file's text. Any error leaves `config` undefined: styx routes nothing.
+// Parses and validates a config file's text. Any error leaves `config` undefined: klyth routes nothing.
 export function parseConfig(text: string): { config?: Config; errors: string[] } {
   let raw: unknown
   try {
@@ -331,8 +329,11 @@ export function parseConfig(text: string): { config?: Config; errors: string[] }
   }
   const errors: string[] = []
   if (!isObject(raw)) return { errors: ['the config must be a JSON object'] }
-  allowKeys(raw, ['$schema', 'version', 'providers', 'aliases'], '$', errors)
-  if (raw['version'] !== undefined && raw['version'] !== 1) errors.push('version: unsupported (styx reads version 1)')
+  allowKeys(raw, ['$schema', 'version', 'providers', 'aliases', 'classifier', 'statusLine', 'compaction'], '$', errors)
+  if (raw['version'] !== undefined && raw['version'] !== 1) errors.push('version: unsupported (klyth reads version 1)')
+  const compaction = compactionOf(raw['compaction'], errors)
+  const statusLine = raw['statusLine']
+  if (statusLine !== undefined && statusLine !== 'pinned' && statusLine !== 'command') errors.push('statusLine: must be "pinned" or "command"')
   const providers: Record<string, ProviderConfig> = {}
   if (raw['providers'] !== undefined && !isObject(raw['providers'])) errors.push('providers: must be an object')
   for (const [id, p] of Object.entries(isObject(raw['providers']) ? raw['providers'] : {})) {
@@ -370,7 +371,8 @@ export function parseConfig(text: string): { config?: Config; errors: string[] }
     const max = host === undefined ? Infinity : (own(host.models, target.slice(slash + 1))?.maxOutputTokens ?? Infinity)
     aliases[name] = { target, ...(typeof note === 'string' ? { note } : {}), ...(set && host !== undefined ? requests(alias as Json, host.kind, path, errors, max, true) : {}) }
   }
-  return errors.length > 0 ? { errors } : { config: { providers, aliases }, errors }
+  const classifier = classifierOf(raw['classifier'], { providers, aliases }, errors)
+  return errors.length > 0 ? { errors } : { config: { providers, aliases, compaction, ...(classifier === undefined ? {} : { classifier }), ...(statusLine === undefined ? {} : { statusLine: statusLine as StatusLine }) }, errors }
 }
 
 // Why `name` (`provider/model`) is not a declared target, or undefined when it is one.
@@ -391,7 +393,7 @@ export function undeclared(config: Config, name: string): string | undefined {
 export const fingerprint = (p: ProviderConfig) => `${p.kind}|${p.origin}|${p.auth === 'none' ? 'none' : `cmd:${JSON.stringify(p.auth.command)}`}`
 
 // The tokens a request may carry: the input cap, and no more than the window leaves after a sent max-tokens
-// value (always sent by the anthropic and bedrock kinds; by openai when maxTokensParam names its key).
+// value (always sent by the anthropic and bedrock kinds; by the openai kinds when maxTokensParam names its key).
 export function inputBudget(m: Pick<ModelConfig, 'contextWindow' | 'maxInputTokens' | 'maxOutputTokens' | 'maxTokensParam'>, kind: Kind): number {
   return Math.min(m.maxInputTokens ?? Infinity, m.contextWindow - (KINDS[kind].sendsMaxTokens || m.maxTokensParam ? m.maxOutputTokens : 0))
 }

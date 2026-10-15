@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 870 400" width="870" height="400" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
-  <title id="t">How styx routes a Claude Code turn</title>
-  <desc id="d">Two paths leave Claude Code. On the styx path, used only when you name a styx alias, Claude Code hands the turn to the styx mod, which hands it to styxd, a helper process. styxd gets your API key from a Keychain helper and calls your provider: an OpenAI-compatible endpoint (OpenAI, OpenRouter or a local server), the Anthropic Messages API, or Amazon Bedrock. On the native path, shown beside it and unchanged, Claude Code talks straight to Anthropic with your Claude subscription login.</desc>
+  <title id="t">How Klyth routes a Claude Code inference step</title>
+  <desc id="d">Klyth supplies selected model responses through Claude Code's turn.step hook. Its helper process, klythd, uses separate provider credentials for Chat Completions, Responses, Anthropic Messages or Amazon Bedrock. Native inference and Claude subscription authentication stay with Claude Code. Tools and permission checks also stay with the host; tools can still contact remote services.</desc>
   <style>
     :root { --bg: #ffffff; --box: #f3f5f8; --line: #56626e; --text: #17202a; --muted: #4a5663; --accent: #1d4ed8; --accent-fill: #e6eefc; }
     @media (prefers-color-scheme: dark) {
@@ -8,24 +8,24 @@
     }
     .bg { fill: var(--bg); }
     .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
-    .styx { fill: var(--accent-fill); stroke: var(--accent); stroke-width: 2; }
+    .klyth { fill: var(--accent-fill); stroke: var(--accent); stroke-width: 2; }
     .h { fill: var(--text); font-size: 15px; font-weight: 600; }
     .s { fill: var(--muted); font-size: 12px; }
     .lane { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.4px; }
     .edge { fill: none; stroke: var(--line); stroke-width: 1.8; }
-    .edge.styx-edge { stroke: var(--accent); stroke-width: 2.2; }
+    .edge.klyth-edge { stroke: var(--accent); stroke-width: 2.2; }
     .div { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 5; opacity: 0.6; }
     .ah { fill: var(--line); }
-    .ah-styx { fill: var(--accent); }
+    .ah-klyth { fill: var(--accent); }
   </style>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
-    <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah-styx" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah-klyth" d="M0 0 L10 5 L0 10 z"/></marker>
   </defs>
   <rect class="bg" width="870" height="400"/>
 
-  <text class="lane" x="230" y="34">STYX PATH: ONLY WHEN YOU NAME A STYX ALIAS, ON YOUR OWN API KEY</text>
-  <text class="lane" x="230" y="316">NATIVE PATH: UNTOUCHED</text>
+  <text class="lane" x="230" y="34">KLYTH ROUTE: SELECTED MODEL CALLS, SEPARATE CREDENTIALS</text>
+  <text class="lane" x="230" y="316">NATIVE INFERENCE: HOST-OWNED AUTHENTICATION</text>
   <line class="div" x1="210" y1="290" x2="850" y2="290"/>
 
   <rect class="box" x="20" y="60" width="150" height="300" rx="10"/>
@@ -34,25 +34,25 @@
   <text class="s" x="95" y="230" text-anchor="middle">tools run here</text>
   <text class="s" x="95" y="248" text-anchor="middle">permissions as usual</text>
 
-  <rect class="styx" x="230" y="98" width="170" height="100" rx="10"/>
-  <text class="h" x="315" y="126" text-anchor="middle">styx mod</text>
+  <rect class="klyth" x="230" y="98" width="170" height="100" rx="10"/>
+  <text class="h" x="315" y="126" text-anchor="middle">Klyth mod</text>
   <text class="s" x="315" y="148" text-anchor="middle">routes /model + subagents</text>
   <text class="s" x="315" y="166" text-anchor="middle">builds the prompt</text>
   <text class="s" x="315" y="184" text-anchor="middle">tool guard, trust</text>
 
-  <rect class="styx" x="470" y="98" width="160" height="100" rx="10"/>
-  <text class="h" x="550" y="126" text-anchor="middle">styxd</text>
+  <rect class="klyth" x="470" y="98" width="160" height="100" rx="10"/>
+  <text class="h" x="550" y="126" text-anchor="middle">klythd</text>
   <text class="s" x="550" y="148" text-anchor="middle">one helper per session</text>
   <text class="s" x="550" y="166" text-anchor="middle">codecs and key helper</text>
   <text class="s" x="550" y="184" text-anchor="middle">timing and usage</text>
 
   <rect class="box" x="470" y="222" width="160" height="46" rx="8"/>
-  <text class="h" x="550" y="241" text-anchor="middle" style="font-size:13px">Keychain</text>
+  <text class="h" x="550" y="241" text-anchor="middle" style="font-size:13px">Credential helper</text>
   <text class="s" x="550" y="258" text-anchor="middle">auth.command helper</text>
 
   <rect class="box" x="690" y="52" width="160" height="56" rx="8"/>
-  <text class="h" x="770" y="73" text-anchor="middle" style="font-size:13px">openai kind</text>
-  <text class="s" x="770" y="92" text-anchor="middle">OpenAI, OpenRouter, local</text>
+  <text class="h" x="770" y="73" text-anchor="middle" style="font-size:13px">OpenAI protocols</text>
+  <text class="s" x="770" y="92" text-anchor="middle">Completions / Responses</text>
   <rect class="box" x="690" y="120" width="160" height="56" rx="8"/>
   <text class="h" x="770" y="141" text-anchor="middle" style="font-size:13px">anthropic kind</text>
   <text class="s" x="770" y="160" text-anchor="middle">Anthropic Messages API</text>
@@ -60,14 +60,14 @@
   <text class="h" x="770" y="209" text-anchor="middle" style="font-size:13px">bedrock kind</text>
   <text class="s" x="770" y="228" text-anchor="middle">Amazon Bedrock Converse</text>
 
-  <path class="edge styx-edge" d="M170 148 H226" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M170 148 H226" marker-end="url(#as)"/>
   <text class="s" x="198" y="138" text-anchor="middle">hook</text>
-  <path class="edge styx-edge" d="M400 148 H466" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M400 148 H466" marker-end="url(#as)"/>
   <text class="s" x="433" y="138" text-anchor="middle">socket</text>
-  <path class="edge styx-edge" d="M630 148 C660 148 660 80 686 80" marker-end="url(#as)"/>
-  <path class="edge styx-edge" d="M630 148 H686" marker-end="url(#as)"/>
-  <path class="edge styx-edge" d="M630 148 C660 148 660 216 686 216" marker-end="url(#as)"/>
-  <path class="edge styx-edge" d="M550 222 V202" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M630 148 C660 148 660 80 686 80" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M630 148 H686" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M630 148 C660 148 660 216 686 216" marker-end="url(#as)"/>
+  <path class="edge klyth-edge" d="M550 222 V202" marker-end="url(#as)"/>
   <text class="s" x="560" y="212" text-anchor="start">key</text>
 
   <rect class="box" x="690" y="312" width="160" height="56" rx="8"/>

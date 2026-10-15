@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{"role":"assistant","content":"{\"verdict\": \"al"}}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{"content":"low\", \"reason\": \"The person asked to fix the typo in README"}}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{"content":" and this edit does exactly that.\"}"}}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-classifier","object":"chat.completion.chunk","created":1791349100,"model":"model-b","choices":[{"index":0,"delta":{}}],"usage":{"completion_tokens":24,"prompt_tokens":612,"total_tokens":636}}
+
+data: [DONE]
+

@@ -31,5 +31,5 @@ jobs:
           bun-version: 1.3.11
       - run: bun install --frozen-lockfile
       - run: bun run check:test-data
-      - run: bun run test:styxd
+      - run: bun run test:klythd
       - run: bun run test:harness

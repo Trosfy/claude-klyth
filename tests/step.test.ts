@@ -8,7 +8,7 @@ import { coalesce, createAssembler } from '../hooks/step'
 
 const HANDBACK = 'SubagentHandback'
 const kinds = (chunks: readonly TurnStepChunk[]) => chunks.map(c => `${c.kind}${'index' in c ? c.index : ''}`)
-const read = { type: 'tool_use', id: 'toolu_styx_000000000000000000000001', name: 'Read', input: { file_path: '/a' } } as const
+const read = { type: 'tool_use', id: 'toolu_klyth_000000000000000000000001', name: 'Read', input: { file_path: '/a' } } as const
 const usage = { type: 'usage', in: 80, out: 30, cacheRead: 20, cacheWrite: 5 } as const
 const stats = { type: 'stats', ttfbMs: 12, totalMs: 40, reqBytes: 900, in: 100, out: 30, finish: 'stop' } as const
 
@@ -51,7 +51,7 @@ test('coalescing merges adjacent deltas of one kind, and keeps kinds and the blo
       { type: 'text', text: 'f' },
     ]),
   ).toEqual([{ type: 'thinking', text: 'ab' }, { type: 'text', text: 'cd' }, read, { type: 'text', text: 'e' }, usage, { type: 'text', text: 'f' }])
-  const words = ['Styx ', 'routes ', 'to ', 'naïve ✓ 日本', '.']
+  const words = ['Klyth ', 'routes ', 'to ', 'naïve ✓ 日本', '.']
   const one = run([...coalesce(words.map((text): StepEvent => ({ type: 'text', text }))), { type: 'stop', reason: 'end_turn' }])
   expect(one.chunks.slice(0, -1)).toEqual([{ kind: 'text', index: 0, text: words.join('') }])
 })
@@ -76,13 +76,13 @@ test('usage maps to the engine form under the step target, rides the stop, and s
   expect(end).toEqual({ chunks: [{ kind: 'stop', stopReason: 'end_turn', usage: turnUsage }], answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: turnUsage })
 })
 
-const FAILED = 'styx: acme HTTP 403: Access denied for this route'
+const FAILED = 'klyth: acme HTTP 403: Access denied for this route'
 
 test('a request failure is handed back as one SubagentHandback call when offered, with no usage, and as text when not', () => {
   const offered = run([usage, { type: 'error', kind: 'request', text: FAILED }, stats], { handback: HANDBACK })
   expect(kinds(offered.chunks)).toEqual(['tool0', 'input0', 'stop'])
   expect(offered.chunks.at(-1)).toEqual({ kind: 'stop', stopReason: 'tool_use', usage: null })
-  expect(offered.chunks[0]).toMatchObject({ kind: 'tool', index: 0, id: expect.stringMatching(/^toolu_styx_[0-9a-f]{24}$/), name: HANDBACK })
+  expect(offered.chunks[0]).toMatchObject({ kind: 'tool', index: 0, id: expect.stringMatching(/^toolu_klyth_[0-9a-f]{24}$/), name: HANDBACK })
   expect(JSON.parse((offered.chunks[1] as { json: string }).json)).toEqual({ message: FAILED })
   expect(offered.end).toMatchObject({ answer: '', toolUses: [{ name: HANDBACK, input: { message: FAILED } }], stopReason: 'tool_use', usage: null, failure: FAILED })
   const plain = run([{ type: 'error', kind: 'request', text: FAILED }])
@@ -94,7 +94,7 @@ test('a request failure is handed back as one SubagentHandback call when offered
 })
 
 test('a response failure, and any failure after a tool call, is answered as text at the next index, the call kept', () => {
-  const said = 'styx: acme response failed: upstream overloaded; retry, or see the debug log'
+  const said = 'klyth: acme response failed: upstream overloaded; retry, or see the debug log'
   const response = run([{ type: 'error', kind: 'response', text: said }], { handback: HANDBACK })
   expect(kinds(response.chunks)).toEqual(['text0', 'stop'])
   expect(response.end).toMatchObject({ answer: said, toolUses: [], stopReason: 'end_turn' })
@@ -104,19 +104,19 @@ test('a response failure, and any failure after a tool call, is answered as text
 })
 
 test('a stream cut mid tool call reaches the assembler as an error after the text: no tool chunk, the failure as text', () => {
-  const { chunks } = run([{ type: 'text', text: 'writing' }, { type: 'error', kind: 'request', text: 'styx: acme stalled (no data for 600 s); retry' }])
+  const { chunks } = run([{ type: 'text', text: 'writing' }, { type: 'error', kind: 'request', text: 'klyth: acme stalled (no data for 600 s); retry' }])
   expect(kinds(chunks)).toEqual(['text0', 'text1', 'stop'])
   expect(chunks.some(c => c.kind === 'tool' || c.kind === 'input')).toBe(false)
 })
 
 test('a failure given at the end replaces what the events said, after what was yielded; events with no stop are a failure', () => {
-  const internal = 'styx: internal error on acme/m; the step was not sent to another model (see the debug log)'
+  const internal = 'klyth: internal error on acme/m; the step was not sent to another model (see the debug log)'
   const assembler = createAssembler('acme/m')
   const fed = [{ type: 'text', text: 'part' } as const, usage].flatMap(ev => assembler.feed(ev))
   const end = assembler.end({ failure: internal, handback: HANDBACK })
   expect(kinds([...fed, ...end.chunks])).toEqual(['text0', 'tool1', 'input1', 'stop'])
   expect(end).toMatchObject({ answer: 'part', toolUses: [{ name: HANDBACK, input: { message: internal } }], stopReason: 'tool_use', usage: null })
-  expect(run([{ type: 'text', text: 'x' }]).end).toMatchObject({ answer: 'xstyx: acme/m ended the step with no stop; retry', stopReason: 'end_turn', usage: null })
+  expect(run([{ type: 'text', text: 'x' }]).end).toMatchObject({ answer: 'xklyth: acme/m ended the step with no stop; retry', stopReason: 'end_turn', usage: null })
   expect(run([{ type: 'error', kind: 'response', text: 'first' }, { type: 'error', kind: 'request', text: 'second' }]).end.answer).toBe('first')
 })
 
@@ -124,7 +124,7 @@ test('deliver turns a text-only end_turn into one handback call carrying the tex
   const ok = [{ type: 'text', text: 'ok' }, usage, { type: 'stop', reason: 'end_turn' }] as const
   const sent = run(ok, { handback: HANDBACK, deliver: true })
   expect(kinds(sent.chunks)).toEqual(['text0', 'tool1', 'input1', 'stop'])
-  expect(sent.chunks[1]).toMatchObject({ kind: 'tool', index: 1, id: expect.stringMatching(/^toolu_styx_[0-9a-f]{24}$/), name: HANDBACK })
+  expect(sent.chunks[1]).toMatchObject({ kind: 'tool', index: 1, id: expect.stringMatching(/^toolu_klyth_[0-9a-f]{24}$/), name: HANDBACK })
   expect(sent.chunks[2]).toEqual({ kind: 'input', index: 1, json: '{"message":"ok"}' })
   expect(sent.chunks[3]).toMatchObject({ kind: 'stop', stopReason: 'tool_use', usage: { input_tokens: 80, output_tokens: 30 } })
   expect(sent.end).toMatchObject({ answer: 'ok', toolUses: [{ name: HANDBACK, input: { message: 'ok' } }], stopReason: 'tool_use', delivered: true })

@@ -1,0 +1,18 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"response-1","status":"in_progress","model":"model-x"},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"function-1","call_id":"call-1","name":"TodoList","arguments":"","status":"in_progress"},"sequence_number":2}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","item_id":"function-1","output_index":0,"arguments":"","sequence_number":3}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"function-1","call_id":"call-1","name":"TodoList","arguments":"","status":"completed"},"sequence_number":4}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"response-1","status":"completed","model":"model-x","usage":{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":150}},"sequence_number":5}
+

@@ -1,7 +1,0 @@
-[
-  {
-    "type": "error",
-    "kind": "response",
-    "text": "styx: p response failed: the stream ended inside a tool call; retry, or see the debug log"
-  }
-]

@@ -1,15 +1,15 @@
 {
-  "name": "styx",
+  "name": "klyth",
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p . && tsc -p tsconfig.styxd.json",
+    "typecheck": "tsc -p . && tsc -p tsconfig.klythd.json",
     "gen-schemas": "bun scripts/gen-schemas.ts",
     "gen-test-data": "bun scripts/gen-test-data.ts",
     "check:schemas": "bun scripts/gen-schemas.ts --check",
     "check:test-data": "bun scripts/gen-test-data.ts --check",
-    "test:harness": "bun tests/harness/post-spawn.ts",
-    "test:styxd": "bun test styxd",
+    "test:harness": "bun tests/harness/post-spawn.ts && bun tests/harness/compact.ts && bun tests/harness/host-window.ts && bun tests/harness/delivery-recovery.ts",
+    "test:klythd": "bun test klythd private/",
     "auth": "bun scripts/auth.ts"
   },
   "devDependencies": {
@@ -19,6 +19,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Trosfy/claude-styx.git"
+    "url": "https://github.com/Trosfy/claude-klyth.git"
   }
 }

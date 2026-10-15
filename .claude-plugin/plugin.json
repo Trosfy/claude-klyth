@@ -1,12 +1,12 @@
 {
-  "name": "styx",
-  "version": "0.1.0",
-  "description": "A Claude Code mod that routes the main conversation and subagents to other model providers through user-defined model aliases, on your own API key",
+  "name": "klyth",
+  "version": "0.2.0",
+  "description": "A model extension router for Claude Code: keep your Claude subscription connected while routing selected model calls to other providers, with separate credentials and billing",
   "author": {
     "name": "styx contributors"
   },
   "types": "./types/index.d.ts",
   "license": "MIT",
-  "repository": "https://github.com/Trosfy/claude-styx",
+  "repository": "https://github.com/Trosfy/claude-klyth",
   "keywords": ["claude-code", "claude-code-mod", "model-routing", "byok", "subagents", "openai", "bedrock", "anthropic"]
 }

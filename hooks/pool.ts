@@ -44,12 +44,12 @@ async function derive(io: PoolIo, s: Session, agentId: string, above: ReadonlySe
 // for any internal error.
 export async function poolOf(io: PoolIo, s: Session, agentId: string): Promise<Pool> {
   const pool = await derive(io, s, agentId, new Set())
-  if (pool === undefined) io.debug(`styx pool ${agentId}: the route of a subagent above it cannot be read, so it is offered SubagentHandback alone`)
+  if (pool === undefined) io.debug(`klyth pool ${agentId}: the route of a subagent above it cannot be read, so it is offered SubagentHandback alone`)
   return pool ?? CLOSED
 }
 
 // Denies a routed subagent a tool its last remote step did not offer: the engine would run it, since a
-// subagent's tools are cut from main's by styx alone. Main and native agents pass. A routed agent with no
+// subagent's tools are cut from main's by klyth alone. Main and native agents pass. A routed agent with no
 // offered set in memory (a hot reload emptied it) has its route read back from state and its set rebuilt
 // from main's tools by its pool; it is denied when that cannot be done. An agent with no route in
 // state is native, and kept in memory as such until it is forgotten, so its tool calls read no state again.
@@ -57,7 +57,7 @@ export async function guard(io: PoolIo & Pick<StepIo, 'list'>, s: Session, e: { 
   if (e.agentId === undefined) return undefined
   // The engine is the authority on SubagentHandback: it runs or refuses the call itself.
   if (e.tool === HANDBACK_TOOL.name) {
-    io.debug(`styx guard ${e.agentId} SubagentHandback passed to the engine`)
+    io.debug(`klyth guard ${e.agentId} SubagentHandback passed to the engine`)
     return undefined
   }
   let offered = s.offered.get(e.agentId)
@@ -70,14 +70,14 @@ export async function guard(io: PoolIo & Pick<StepIo, 'list'>, s: Session, e: { 
     s.offered.set(e.agentId, offered)
   }
   const allowed = offered.has(e.tool)
-  io.debug(`styx guard ${e.agentId} ${e.tool} ${allowed ? 'allowed' : 'denied'}`)
-  return allowed ? undefined : { deny: `styx: ${e.tool} is not available to the ${s.routes.get(e.agentId)?.type ?? 'general-purpose'} subagent` }
+  io.debug(`klyth guard ${e.agentId} ${e.tool} ${allowed ? 'allowed' : 'denied'}`)
+  return allowed ? undefined : { deny: `klyth: ${e.tool} is not available to the ${s.routes.get(e.agentId)?.type ?? 'general-purpose'} subagent` }
 }
 
-// What the guard answers when it fails: a deny for a routed subagent or one styx has not cached (its route read
+// What the guard answers when it fails: a deny for a routed subagent or one klyth has not cached (its route read
 // may be what failed), so a failed check never lets a call through; undefined for main and for an agent known
 // to be native, whose call goes on.
 export function guardFailed(s: Session, e: { tool: string; agentId?: string }): { deny: string } | undefined {
   const routed = e.agentId !== undefined && (s.offered.has(e.agentId) || s.routes.get(e.agentId)?.target !== null)
-  return routed ? { deny: `styx: could not check ${e.tool} for this subagent, so it was denied; retry, or see the debug log` } : undefined
+  return routed ? { deny: `klyth: could not check ${e.tool} for this subagent, so it was denied; retry, or see the debug log` } : undefined
 }
